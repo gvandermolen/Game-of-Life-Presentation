@@ -3,7 +3,7 @@
 ## Resumen
 
 - JavaScript sin framework + [Three.js](https://threejs.org) r170 para el tablero 3D.
-- esbuild empaqueta todo en **un solo archivo** `jugar/JUGAR.html` (unos 720 KB): JavaScript, CSS y tipografías en base64. No hay imágenes ni sonidos externos: texturas y sonidos se generan por código.
+- esbuild empaqueta todo en **un solo archivo** `jugar/JUGAR.html` (unos 3 MB): JavaScript, CSS, tipografías y el HDRI de iluminación en base64. No hay archivos externos: las demás texturas y los sonidos se generan por código.
 - Abre desde `file://` con doble clic, sin servidor ni internet.
 - Navegadores: Chrome/Edge 100+, Safari 15+, Firefox 100+. Requiere WebGL 2.
 
@@ -119,13 +119,15 @@ Si cambia el formato, subir `SESSION_VERSION` en `session.js`: las partidas viej
 
 ## Gráficos
 
-- Renderizado PBR con mapeo de tonos ACES, entorno `RoomEnvironment`, sombra suave de una luz principal, luz de relleno y foco cenital.
+- Renderizado PBR con mapeo de tonos ACES, iluminación de entorno de un HDRI de estudio (`assets/studio.hdr`, "Studio Small 09" 1K, CC0 de Poly Haven, va embebido en el HTML), sombra suave de una luz principal, luz de relleno y foco cenital.
+- Posprocesado (`post.js`, Alta y Media): oclusión ambiental GTAO a media resolución (sombras de contacto donde fichas y edificios tocan el tablero), un brillo leve en dorados y faroles, desenfoque tilt-shift suave arriba y abajo (efecto de maqueta fotografiada) y SMAA como antialiasing. El buffer intermedio no usa multisampling: en GPUs de notebook costaba más que todos los efectos juntos.
 - Todo lo que tiene que verse nítido de cerca es geometría, no textura: rutas (cintas a lo largo de la curva), casillas (bloques curvos), rotondas, salidas, avenida Meta, río y puentes (`roads.js`). Los textos del tablero se arman con un atlas de glifos y siguen cualquier curva (`text3d.js`), así "RIACHUELO" sigue al río y "META · PALACIO DE JUSTICIA" a la avenida.
 - Debajo queda un solo plano con el fondo impreso (`printed.js`, 40 píxeles por unidad): regiones de color difuminadas, plaza, viñeta, pliegue y borde. Nada ahí necesita bordes duros, por eso no se pixela. El grano del papel es una textura chica repetida como relieve.
 - Al cambiar el color de un equipo solo cambia el color del material de su borde de ruta y se rehacen los nombres de las salidas (con 120 ms de espera para no rehacerlos en cada movimiento del selector).
 - Materiales tipo plástico con barniz (clearcoat) para fichas, casillas, monumentos y edificios.
 - La geometría estática se une por material (`merge.js`): unas 170 llamadas de dibujo por cuadro contando el pase de sombras.
-- Calidad (Configuración > Presentación): **Alta** (resolución 2×, sombras 4096), **Media** (1,25×, 2048), **Baja** (1×, sin sombras, menos árboles). Además, si el equipo no sostiene unos 40 cuadros por segundo, la resolución baja sola una vez.
+- Calidad (Configuración > Presentación): **Alta** (resolución hasta 1,5×, sombras 4096, posprocesado completo), **Media** (1×, 2048, posprocesado completo), **Baja** (1×, sin sombras ni posprocesado, menos árboles). El costo crece con la cantidad de píxeles: en una Radeon Pro 5500M, a 1920×1080, Alta cuesta unos 26 ms de GPU por cuadro a 1,5× y unos 44 ms a 2×.
+- Si el equipo no sostiene unos 45 cuadros por segundo, cada 2 segundos se resigna algo: primero resolución (de a 0,25× hasta 1×), después el tilt-shift y por último la oclusión ambiental.
 
 ## Pruebas
 

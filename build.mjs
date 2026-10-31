@@ -29,6 +29,7 @@ async function build() {
     minify: true,
     target: ['chrome100', 'safari15', 'edge100', 'firefox100'],
     legalComments: 'none',
+    loader: { '.hdr': 'dataurl' },
     write: false,
   });
   const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');

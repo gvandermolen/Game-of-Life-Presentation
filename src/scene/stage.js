@@ -1,16 +1,19 @@
 import * as THREE from 'three';
-import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import studioHdr from '../assets/studio.hdr';
 import { LANE_LENGTH, crossingAt } from '../engine/board.js';
 import { buildBoard, PIECE_Y } from './board.js';
 import { BOARD, SPINNER_POS, crossingCenter, laneSquare } from './layout.js';
 import { UBA } from './palette.js';
+import { Post } from './post.js';
 import { Spinner } from './spinner.js';
 import { buildPiece, setPieceColor } from './vehicles.js';
 
 const QUALITY = {
-  alto: { pixelRatio: 2, shadow: 4096, shadows: true },
-  medio: { pixelRatio: 1.25, shadow: 2048, shadows: true },
-  bajo: { pixelRatio: 1, shadow: 1024, shadows: false },
+  // Above 1.5 the cost grows with the square of the ratio while SMAA already hides the edges.
+  alto: { pixelRatio: 1.5, shadow: 4096, shadows: true, post: { ao: true, aoSamples: 12, tiltShift: true } },
+  medio: { pixelRatio: 1, shadow: 2048, shadows: true, post: { ao: true, aoSamples: 8, tiltShift: true } },
+  bajo: { pixelRatio: 1, shadow: 1024, shadows: false, post: null },
 };
 
 const VIEWS = {
@@ -37,7 +40,7 @@ export class Stage {
   }
 
   async init(roster) {
-    const r = new THREE.WebGLRenderer({ antialias: true, powerPreference: 'high-performance' });
+    const r = new THREE.WebGLRenderer({ antialias: !this.q.post, powerPreference: 'high-performance' });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.q.pixelRatio));
     r.setSize(this.container.clientWidth, this.container.clientHeight);
     r.outputColorSpace = THREE.SRGBColorSpace;
@@ -52,8 +55,11 @@ export class Stage {
     scene.background = new THREE.Color('#1a120c');
     scene.fog = new THREE.Fog('#1a120c', 70, 135);
     const pmrem = new THREE.PMREMGenerator(r);
-    scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
-    scene.environmentIntensity = 0.42;
+    const hdr = await new RGBELoader().loadAsync(studioHdr);
+    scene.environment = pmrem.fromEquirectangular(hdr).texture;
+    hdr.dispose();
+    pmrem.dispose();
+    scene.environmentIntensity = 0.5;
     this.scene = scene;
 
     scene.add(new THREE.HemisphereLight('#fff4e0', '#3a2616', 0.42));
@@ -98,6 +104,7 @@ export class Stage {
 
     this.buildMarkers();
     this.setRoster(roster);
+    if (this.q.post) this.post = new Post(r, scene, this.camera, this.q.post);
 
     window.addEventListener('resize', () => this.resize());
     this.loop();
@@ -145,6 +152,7 @@ export class Stage {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
+    this.post?.setSize(w, h);
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
   }
@@ -358,20 +366,26 @@ export class Stage {
     piece.userData.lift.rotation.y = 0;
   }
 
-  // Lower the render resolution once if the machine cannot keep ~40 fps.
+  // While the machine cannot keep ~45 fps, give up resolution first, then the
+  // effects, one step every two seconds.
   adapt(dt) {
-    if (this.adapted) return;
+    // The first frames compile shaders and would read as a slow machine.
+    if (this.adapted || this.time < 1.5) return;
     this.frames = (this.frames || 0) + 1;
     this.frameTime = (this.frameTime || 0) + dt;
-    if (this.frameTime < 3) return;
+    if (this.frameTime < 2) return;
     const fps = this.frames / this.frameTime;
     this.frames = 0;
     this.frameTime = 0;
+    if (fps >= 45) {
+      this.adapted = true;
+      return;
+    }
     const pr = this.renderer.getPixelRatio();
-    if (fps < 40 && pr > 1) {
-      this.renderer.setPixelRatio(Math.max(1, pr * 0.66));
+    if (pr > 1) {
+      this.renderer.setPixelRatio(Math.max(1, pr - 0.25));
       this.resize();
-    } else {
+    } else if (!this.post?.degrade()) {
       this.adapted = true;
     }
   }
@@ -393,7 +407,8 @@ export class Stage {
       if (!this.tasks.size) this.fast = false;
       this.updateCamera(dt);
       this.updateMarkers();
-      this.renderer.render(this.scene, this.camera);
+      if (this.post) this.post.render();
+      else this.renderer.render(this.scene, this.camera);
     };
     tick();
   }
