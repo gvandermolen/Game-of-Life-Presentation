@@ -93,7 +93,9 @@ kbd { font-family: inherit; font-weight: 700; font-size: .85em; background: var(
 
 .spin-result { position: absolute; left: 50%; top: 42%; transform: translate(-50%, -50%) scale(.6); opacity: 0; pointer-events: none; text-align: center; }
 .spin-result.show { animation: pop 1.6s var(--ease-out) both; }
-.spin-result b { display: block; font-size: calc(var(--u) * 9); font-weight: 900; color: var(--gold); line-height: .9; -webkit-text-stroke: 3px var(--navy); text-shadow: 0 10px 30px rgba(0,0,0,.5); }
+.spin-result b { position: relative; z-index: 0; display: block; font-size: calc(var(--u) * 9); font-weight: 900; color: var(--gold); line-height: .9; }
+/* Outline lives on a copy behind the digits: a stroke on the digits themselves eats into the fill. */
+.spin-result b::before { content: attr(data-n); position: absolute; inset: 0; z-index: -1; color: var(--navy); -webkit-text-stroke: 7px var(--navy); text-shadow: 0 10px 30px rgba(0,0,0,.5); }
 .spin-result span { display: inline-block; margin-top: calc(var(--u) * 0.4); background: var(--navy); color: var(--paper); font-weight: 700; padding: .25em .9em; border-radius: 99px; font-size: calc(var(--u) * 1); }
 @keyframes pop { 0% { opacity: 0; transform: translate(-50%, -50%) scale(.5); } 18% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); } 30% { transform: translate(-50%, -50%) scale(1); } 80% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -60%) scale(1); } }
 

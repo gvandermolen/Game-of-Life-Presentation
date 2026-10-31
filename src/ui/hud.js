@@ -150,7 +150,7 @@ export class Hud {
 
   showSpin(value, teamName) {
     const s = this.q('spin');
-    s.innerHTML = `<b>${value}</b><span>${esc(teamName)} avanza</span>`;
+    s.innerHTML = `<b data-n="${value}">${value}</b><span>${esc(teamName)} avanza</span>`;
     s.classList.remove('show');
     void s.offsetWidth;
     s.classList.add('show');
