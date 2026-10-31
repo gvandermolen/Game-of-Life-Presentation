@@ -77,12 +77,28 @@ function buildBoardBody(group, printed) {
   group.add(top);
 }
 
+const WINDOW = new THREE.MeshPhysicalMaterial({ color: '#2E4A68', roughness: 0.12, metalness: 0.2, clearcoat: 1 });
+const DOOR = new THREE.MeshStandardMaterial({ color: '#5A3A26', roughness: 0.5 });
+
+function inset(g, mat, [sx, sy, sz], [x, y, z]) {
+  const m = new THREE.Mesh(new RoundedBoxGeometry(sx, sy, sz, 1, Math.min(sx, sy, sz) / 2 - 0.001), mat);
+  m.position.set(x, y, z);
+  m.receiveShadow = true;
+  g.add(m);
+}
+
 // White plastic buildings, like the 3D pieces of the vintage board.
 function house(white, roofMat, w, d, h) {
   const g = new THREE.Group();
   const body = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.04), white));
   body.position.y = h / 2;
   g.add(body);
+  inset(g, DOOR, [0.15, 0.25, 0.024], [0, 0.125, d / 2]);
+  for (const s of [-1, 1]) {
+    inset(g, WINDOW, [0.13, 0.13, 0.024], [s * w * 0.3, h * 0.58, d / 2]);
+    inset(g, WINDOW, [0.024, 0.13, 0.13], [s * w / 2, h * 0.58, 0]);
+    inset(g, WINDOW, [0.13, 0.13, 0.024], [s * w * 0.22, h * 0.58, -d / 2]);
+  }
   const roofShape = new THREE.Shape();
   roofShape.moveTo(-w / 2 - 0.08, 0);
   roofShape.lineTo(w / 2 + 0.08, 0);
@@ -106,6 +122,13 @@ function tower(white, glass, w, d, h) {
     band.position.y = 0.32 + f * 0.34;
     g.add(band);
   }
+  const cornice = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w + 0.07, 0.06, d + 0.07, 2, 0.02), white));
+  cornice.position.y = h;
+  g.add(cornice);
+  const plant = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w * 0.45, 0.14, d * 0.4, 2, 0.03), white));
+  plant.position.set(w * 0.1, h + 0.1, -d * 0.1);
+  g.add(plant);
+  inset(g, DOOR, [0.2, 0.2, 0.024], [0, 0.1, d / 2]);
   return g;
 }
 
@@ -248,9 +271,21 @@ function buildCourthouse(group) {
   hall.position.set(1.4, 0.54 + 1.2, 0);
   g.add(hall);
   for (let i = 0; i < 6; i++) {
+    const z = -2.3 + i * 0.92;
     const col = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 2.1, 20), stone));
-    col.position.set(-0.05, 0.54 + 1.05, -2.3 + i * 0.92);
+    col.position.set(-0.05, 0.54 + 1.05, z);
     g.add(col);
+    for (const y of [0.58, 2.6]) {
+      const cap = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.42, 0.1, 0.42, 2, 0.02), stoneDark));
+      cap.position.set(-0.05, y, z);
+      g.add(cap);
+    }
+  }
+  // Two rows of tall windows along each side of the hall.
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 4; i++) {
+      for (const y of [1.3, 2.3]) inset(g, WINDOW, [0.34, 0.55, 0.03], [0.7 + i * 0.6, y, side * 2.8]);
+    }
   }
   const lintel = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.8, 0.34, 5.9, 2, 0.04), stone));
   lintel.position.set(0.05, 2.82, 0);
@@ -272,6 +307,18 @@ function buildCourthouse(group) {
   const dome = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.82, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), gold));
   dome.position.set(1.6, 3.85, 0);
   g.add(dome);
+  for (let i = 0; i < 4; i++) {
+    const rib = shadowed(new THREE.Mesh(new THREE.TorusGeometry(0.83, 0.03, 6, 32, Math.PI), stone));
+    rib.position.set(1.6, 3.85, 0);
+    rib.rotation.y = (i * Math.PI) / 4;
+    g.add(rib);
+  }
+  const lantern = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.3, 16), stone));
+  lantern.position.set(1.6, 4.75, 0);
+  g.add(lantern);
+  const drumBand = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.93, 0.93, 0.08, 32), stoneDark));
+  drumBand.position.set(1.6, 3.85, 0);
+  g.add(drumBand);
 
   const plaque = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.34), new THREE.MeshStandardMaterial({ map: signTexture('PALACIO DE JUSTICIA', { size: 46, h: 96, w: 768 }) }));
   plaque.position.set(-0.46, 2.82, 0);

@@ -223,70 +223,53 @@ function readableYaw(heading) {
 }
 
 // A raised plastic block that bends with the road.
+// A curved tile block with a chamfer round its top edge, so every edge catches
+// a highlight. The top ring is inset by the chamfer both across and along the lane.
 function tileGeometry(lane, s, L, halfW) {
-  const frames = laneFrames(lane, s - L / 2, s + L / 2, 0.06);
-  const r = 0.07;
-  const n = frames.length;
+  const CH = 0.016;
+  const n = Math.max(2, Math.ceil(L / 0.06) + 1);
+  const ring = (s0, s1) =>
+    Array.from({ length: n }, (_, i) => {
+      const { p, normal } = laneAt(lane, s0 + ((s1 - s0) * i) / (n - 1));
+      return { p, n: normal };
+    });
+  const base = ring(s - L / 2, s + L / 2);
+  const top = ring(s - L / 2 + CH, s + L / 2 - CH);
+  const pt = (f, side, w, y) => new THREE.Vector3(f.p.x + f.n.x * side * w, y, f.p.z + f.n.z * side * w);
+  const T = (i, side) => pt(top[i], side, halfW - CH, Y.tileTop);
+  const C = (i, side) => pt(base[i], side, halfW, Y.tileTop - CH);
+  const B = (i, side) => pt(base[i], side, halfW, Y.tileBase);
+
   const pos = [];
-  const quad = (a, b, c, d) => pos.push(...a, ...b, ...c, ...a, ...c, ...d);
-  const at = (i, side, y, inset = 0) => {
-    const f = frames[i];
-    const w = halfW - inset;
-    return [f.p.x + f.n.x * side * w, y, f.p.z + f.n.z * side * w];
+  const e1 = new THREE.Vector3();
+  const e2 = new THREE.Vector3();
+  // Quad a-b-c-d, wound so its normal points along `out`.
+  const quad = (a, b, c, d, out) => {
+    e1.subVectors(b, a);
+    e2.subVectors(c, a);
+    const v = e1.cross(e2).dot(out) >= 0 ? [a, b, c, a, c, d] : [a, c, b, a, d, c];
+    for (const p of v) pos.push(p.x, p.y, p.z);
   };
+  const up = new THREE.Vector3(0, 1, 0);
   for (let i = 0; i < n - 1; i++) {
-    const inset = (j) => (j === 0 || j === n - 1 ? r * 0.5 : 0);
-    quad(at(i, -1, Y.tileTop, inset(i)), at(i, 1, Y.tileTop, inset(i)), at(i + 1, 1, Y.tileTop, inset(i + 1)), at(i + 1, -1, Y.tileTop, inset(i + 1)));
-    for (const side of [-1, 1]) quad(at(i, side, Y.tileBase), at(i + 1, side, Y.tileBase), at(i + 1, side, Y.tileTop, inset(i + 1)), at(i, side, Y.tileTop, inset(i)));
+    quad(T(i, -1), T(i, 1), T(i + 1, 1), T(i + 1, -1), up);
+    for (const side of [-1, 1]) {
+      const out = base[i].n.clone().multiplyScalar(side);
+      quad(T(i, side), T(i + 1, side), C(i + 1, side), C(i, side), out.clone().add(up));
+      quad(C(i, side), C(i + 1, side), B(i + 1, side), B(i, side), out);
+    }
   }
-  for (const i of [0, n - 1]) quad(at(i, -1, Y.tileBase), at(i, 1, Y.tileBase), at(i, 1, Y.tileTop, r * 0.5), at(i, -1, Y.tileTop, r * 0.5));
+  const along = base[n - 1].p.clone().sub(base[n - 2].p).setY(0).normalize();
+  const back = base[0].p.clone().sub(base[1].p).setY(0).normalize();
+  for (const [i, out] of [[0, back], [n - 1, along]]) {
+    quad(T(i, -1), T(i, 1), C(i, 1), C(i, -1), out.clone().add(up));
+    quad(C(i, -1), C(i, 1), B(i, 1), B(i, -1), out);
+  }
   const geo = new THREE.BufferGeometry();
   geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  orientOutward(geo, frames);
   geo.computeVertexNormals();
   geo.setAttribute('uv', new THREE.Float32BufferAttribute(new Array((pos.length / 3) * 2).fill(0), 2));
   return geo;
-}
-
-// Flip any triangle whose normal points into the block.
-function orientOutward(geo, frames) {
-  const p = geo.attributes.position.array;
-  const centre = frames[Math.floor(frames.length / 2)].p;
-  const a = new THREE.Vector3();
-  const b = new THREE.Vector3();
-  const c = new THREE.Vector3();
-  const nrm = new THREE.Vector3();
-  const mid = new THREE.Vector3();
-  for (let i = 0; i < p.length; i += 9) {
-    a.fromArray(p, i);
-    b.fromArray(p, i + 3);
-    c.fromArray(p, i + 6);
-    nrm.subVectors(b, a).cross(new THREE.Vector3().subVectors(c, a));
-    mid.addVectors(a, b).add(c).divideScalar(3);
-    const isTop = Math.abs(a.y - Y.tileTop) < 1e-4 && Math.abs(b.y - Y.tileTop) < 1e-4 && Math.abs(c.y - Y.tileTop) < 1e-4;
-    const out = isTop ? new THREE.Vector3(0, 1, 0) : nearestOutward(mid, frames, centre);
-    if (nrm.dot(out) < 0) {
-      for (let k = 0; k < 3; k++) [p[i + 3 + k], p[i + 6 + k]] = [p[i + 6 + k], p[i + 3 + k]];
-    }
-  }
-}
-
-function nearestOutward(mid, frames) {
-  let best = frames[0];
-  let bestD = Infinity;
-  for (const f of frames) {
-    const d = f.p.distanceToSquared(mid);
-    if (d < bestD) {
-      bestD = d;
-      best = f;
-    }
-  }
-  const v = new THREE.Vector3(mid.x - best.p.x, 0, mid.z - best.p.z);
-  if (v.lengthSq() < 1e-6) return new THREE.Vector3(1, 0, 0);
-  const lateral = Math.abs(v.dot(best.n));
-  const along = Math.abs(v.length() ** 2 - lateral ** 2) ** 0.5;
-  if (lateral > along) return best.n.clone().multiplyScalar(Math.sign(v.dot(best.n)));
-  return v.normalize();
 }
 
 function buildSquares(group, M) {

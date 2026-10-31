@@ -64,11 +64,18 @@ function plinth(g, r, mat = M.plaza) {
 function obelisco() {
   const g = new THREE.Group();
   plinth(g, 0.95);
+  add(g, box(0.92, 0.05, 0.92, 0.015), M.stone, 0, 0.105, 0);
   add(g, box(0.72, 0.14, 0.72), M.stone, 0, 0.15, 0);
   const shaft = add(g, new THREE.CylinderGeometry(0.15, 0.27, 3.3, 4, 1), M.white, 0, 0.22 + 1.65, 0);
   shaft.rotation.y = Math.PI / 4;
   const tip = add(g, new THREE.ConeGeometry(0.21, 0.34, 4), M.white, 0, 0.22 + 3.3 + 0.17, 0);
   tip.rotation.y = Math.PI / 4;
+  // The small window near the top, on every face.
+  const half = (0.15 + (0.27 - 0.15) * (0.3 / 3.3)) * Math.SQRT1_2;
+  for (let i = 0; i < 4; i++) {
+    const a = (i * Math.PI) / 2;
+    add(g, box(0.06, 0.09, 0.012, 0.004), M.dark, Math.sin(a) * half, 0.22 + 3.0, Math.cos(a) * half).rotation.y = a;
+  }
   return { g, r: 1.0 };
 }
 
@@ -82,9 +89,20 @@ function casaRosada() {
   arch.rotation.x = Math.PI / 2;
   arch.rotation.z = Math.PI / 2;
   add(g, box(0.34, 0.26, 0.02, 0.005), M.dark, 0, 0.28, 0.5);
-  for (const x of [-0.85, -0.45, 0.45, 0.85]) {
-    for (const y of [0.32, 0.6]) add(g, box(0.16, 0.16, 0.02, 0.005), M.white, x, y, 0.435);
+  // Arched windows: a square with a half disc on top.
+  const archTop = new THREE.CylinderGeometry(0.07, 0.07, 0.02, 16, 1, false, 0, Math.PI);
+  archTop.rotateX(Math.PI / 2);
+  archTop.rotateZ(Math.PI / 2);
+  for (const x of [-0.78, -0.6, -0.42, 0.42, 0.6, 0.78]) {
+    for (const y of [0.3, 0.58]) {
+      add(g, box(0.14, 0.13, 0.02, 0.005), M.white, x, y, 0.435);
+      add(g, archTop, M.white, x, y + 0.065, 0.435);
+    }
   }
+  // Corner pavilions and the balustrade along the roof.
+  for (const s of [-1, 1]) add(g, box(0.3, 0.86, 0.92), M.pink, s * 1.06, 0.5, 0.01);
+  for (let i = 0; i < 17; i++) add(g, box(0.03, 0.07, 0.03, 0.008), M.pinkDark, -1.0 + i * 0.125, 0.9, 0.42);
+  add(g, box(2.1, 0.025, 0.04, 0.008), M.pinkDark, 0, 0.94, 0.42);
   flag(g, 0, 1.08, 0);
   return { g, r: 1.35 };
 }
@@ -103,6 +121,10 @@ function congreso() {
   add(g, new THREE.ExtrudeGeometry(ped, { depth: 0.16, bevelEnabled: false }), M.white, 0, 0.75, 0.62);
   add(g, new THREE.CylinderGeometry(0.36, 0.38, 0.4, 32), M.stone, 0, 1.12, 0);
   add(g, new THREE.SphereGeometry(0.36, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), M.copper, 0, 1.32, 0);
+  for (let i = 0; i < 4; i++) {
+    add(g, new THREE.TorusGeometry(0.365, 0.014, 6, 28, Math.PI), M.stone, 0, 1.32, 0).rotation.y = (i * Math.PI) / 4;
+  }
+  for (let i = 0; i < 3; i++) add(g, box(1.1 - i * 0.08, 0.05, 0.12, 0.012), M.stone, 0, 0.105 + i * 0.05, 0.84 - i * 0.07);
   add(g, new THREE.CylinderGeometry(0.06, 0.08, 0.22, 12), M.copper, 0, 1.78, 0);
   add(g, new THREE.SphereGeometry(0.06, 12, 8), M.copper, 0, 1.92, 0);
   return { g, r: 1.4 };
@@ -197,6 +219,7 @@ function planetario() {
     leg.rotation.set(Math.sin(a) * 0.35, 0, -Math.cos(a) * 0.35);
   }
   add(g, new THREE.SphereGeometry(0.55, 40, 24), M.steel, 0, 1.15, 0);
+  add(g, new THREE.CylinderGeometry(0.556, 0.556, 0.07, 48, 1, true), M.dark, 0, 1.2, 0);
   const ring = add(g, new THREE.TorusGeometry(0.58, 0.04, 10, 48), M.white, 0, 0.98, 0);
   ring.rotation.x = Math.PI / 2;
   return { g, r: 1.0 };
@@ -214,7 +237,16 @@ function torreMonumental() {
     const disc = new THREE.CylinderGeometry(0.17, 0.17, 0.02, 24);
     disc.rotateX(Math.PI / 2);
     add(g, disc, M.white, Math.sin(a) * 0.3, 2.05, Math.cos(a) * 0.3).rotation.y = a;
+    const hand = (len, angle) => {
+      const h = add(g, box(0.012, len, 0.008, 0.003), M.dark, Math.sin(a) * 0.312, 2.05, Math.cos(a) * 0.312);
+      h.rotation.set(0, a, angle);
+      h.translateY(len / 2);
+    };
+    hand(0.12, -0.5);
+    hand(0.09, 1.9);
   }
+  // White stone quoins on the brick corners.
+  for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) add(g, box(0.07, 1.86, 0.07, 0.01), M.white, x * 0.27, 1.33, z * 0.27);
   add(g, new THREE.SphereGeometry(0.22, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.copper, 0, 2.75, 0);
   add(g, new THREE.CylinderGeometry(0.015, 0.015, 0.3, 6), M.dark, 0, 3.05, 0);
   return { g, r: 0.9 };
@@ -237,6 +269,11 @@ function monumental() {
   const band = add(g, new THREE.TorusGeometry(1.03, 0.035, 8, 64), M.red, 0, 0.34, 0);
   band.rotation.x = Math.PI / 2;
   band.scale.set(1.3, 1, 1);
+  // Floodlight masts at the four corners.
+  for (const [x, z] of [[-1, -1], [-1, 1], [1, -1], [1, 1]]) {
+    add(g, new THREE.CylinderGeometry(0.02, 0.03, 0.9, 8), M.dark, x * 1.15, 0.45, z * 0.72);
+    add(g, box(0.16, 0.1, 0.04, 0.01), M.white, x * 1.15, 0.92, z * 0.72).rotation.y = Math.atan2(-x, -z);
+  }
   return { g, r: 1.45 };
 }
 
