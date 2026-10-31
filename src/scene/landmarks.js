@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { UBA } from './palette.js';
-import { isFree } from './space.js';
+import { ROAD_WIDTH, distanceToRoads } from './layout.js';
+import { RIVER_WIDTH, isFree, riverDistance } from './space.js';
 import { textAt, textWidth } from './text3d.js';
 
 // One landmark per neighbourhood, placed roughly where the barrio sits on a real
@@ -310,7 +311,7 @@ export const LANDMARKS = [
   { barrio: 'Recoleta', name: 'Floralis Genérica', at: [7, -9.5], build: floralis },
   { barrio: 'Palermo', name: 'Planetario', at: [-9, -9.5], build: planetario },
   { barrio: 'Retiro', name: 'Torre Monumental', at: [17, -9.5], build: torreMonumental },
-  { barrio: 'Núñez', name: 'Estadio Monumental', at: [-19.5, -10.5], build: monumental },
+  { barrio: 'Núñez', name: 'Estadio Monumental', at: [-22, -5.5], build: monumental },
 ];
 
 const clashes = (spots, x, z, r) => spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + r + 0.2);
@@ -330,28 +331,70 @@ function nearestFree(x0, z0, r, spots, opts) {
   return null;
 }
 
-// Two-line label (barrio, landmark) beside the model, wherever it fits.
+// Both text lines together, measured from the label centre.
+const LABEL_HALF_DEPTH = 0.42;
+const LABEL_PAD = 0.15;
+
+const rectGap = (s, x0, x1, z0, z1) => Math.hypot(Math.max(x0 - s.x, 0, s.x - x1), Math.max(z0 - s.z, 0, s.z - z1)) - s.r;
+
+// Two-line label (barrio, landmark) as close to the model as it fits without
+// touching a road, a roundabout, the river or anything already placed.
+// Spots in front of the model (towards the audience) win over spots behind it,
+// where the model itself would hide the text.
 function labelSpot(x, z, r, w, spots) {
+  const hw = w / 2 + LABEL_PAD;
+  const hd = LABEL_HALF_DEPTH + LABEL_PAD;
   const fits = (cx, cz) => {
-    for (let t = -0.5; t <= 0.5; t += 0.25) {
-      const px = cx + t * w;
-      if (!isFree(px, cz, 0.3, { road: 0.05, river: 0.05 }) || clashes(spots, px, cz, 0.3)) return false;
+    if (spots.some((s) => rectGap(s, cx - hw, cx + hw, cz - hd, cz + hd) < 0.05)) return false;
+    // Overlapping circles that cover the whole band, height included.
+    const n = Math.max(2, Math.ceil(w / 0.25));
+    for (let i = 0; i <= n; i++) {
+      if (!isFree(cx - w / 2 + (w * i) / n, cz, hd + 0.03, { road: 0.08, river: 0.08 })) return false;
     }
     return true;
   };
-  const cands = [
-    [x, z + r + 0.5],
-    [x, z - r - 0.5],
-    [x + r + w / 2 + 0.2, z],
-    [x - r - w / 2 - 0.2, z],
-    [x, z + r + 1.1],
-    [x, z - r - 1.1],
-  ];
-  return cands.find(([cx, cz]) => fits(cx, cz)) || cands[0];
+  const cands = [];
+  const reachX = r + hw + 3.5;
+  const reachZ = r + hd + 3.5;
+  for (let cx = x - reachX; cx <= x + reachX; cx += 0.25) {
+    for (let cz = z - reachZ; cz <= z + reachZ; cz += 0.25) {
+      const gap = rectGap({ x, z, r }, cx - hw, cx + hw, cz - hd, cz + hd);
+      if (gap < 0) continue;
+      cands.push({ cx, cz, score: gap + (cz < z ? 1.2 : 0) + Math.abs(cx - x) * 0.15 });
+    }
+  }
+  // A road or the river between label and model makes the label read as the next block's.
+  const acrossRoad = (cx, cz) => {
+    for (let t = 0.1; t < 1; t += 0.1) {
+      const px = x + (cx - x) * t;
+      const pz = z + (cz - z) * t;
+      if (distanceToRoads(px, pz) < ROAD_WIDTH / 2 || riverDistance(px, pz) < RIVER_WIDTH / 2) return true;
+    }
+    return false;
+  };
+  cands.sort((a, b) => a.score - b.score);
+  let across = null;
+  for (const c of cands) {
+    if (across && c.score > across.score + 6) break;
+    if (!fits(c.cx, c.cz)) continue;
+    if (!acrossRoad(c.cx, c.cz)) return [c.cx, c.cz];
+    across ||= c;
+  }
+  return across ? [across.cx, across.cz] : null;
+}
+
+// Circles covering a label, so later houses and trees keep off the text.
+function labelSpots(cx, cz, w) {
+  const out = [];
+  const r = LABEL_HALF_DEPTH + LABEL_PAD;
+  const n = Math.max(1, Math.ceil(w / (r * 1.2)));
+  for (let i = 0; i <= n; i++) out.push({ x: cx - w / 2 + (w * i) / n, z: cz, r, label: { x0: cx - w / 2, x1: cx + w / 2, z1: cz + LABEL_HALF_DEPTH } });
+  return out;
 }
 
 export function buildLandmarks(group, spots) {
   mats();
+  const labels = [];
   for (const L of LANDMARKS) {
     const { g, r } = L.build();
     const at = nearestFree(L.at[0], L.at[1], r, spots, { road: 0.25, river: 0.3 });
@@ -363,9 +406,23 @@ export function buildLandmarks(group, spots) {
 
     const barrio = L.barrio.toUpperCase();
     const w = Math.max(textWidth(barrio, 0.4, 700, true, 0.05), textWidth(L.name, 0.24, 400, true));
-    const [lx, lz] = labelSpot(x, z, r, w, spots);
+    const spot = labelSpot(x, z, r, w, spots);
+    if (!spot) {
+      console.warn(`Sin lugar para el rótulo de ${L.barrio}`);
+      continue;
+    }
+    const [lx, lz] = spot;
     group.add(textAt(barrio, lx, lz - 0.14, { size: 0.4, weight: 700, italic: true, color: INK, spacing: 0.05, y: 0.012 }));
     group.add(textAt(L.name, lx, lz + 0.22, { size: 0.24, weight: 400, italic: true, color: INK, y: 0.012 }));
-    spots.push({ x: lx, z: lz, r: w / 2 });
+    spots.push(...labelSpots(lx, lz, w));
+    labels.push({ barrio: L.barrio, x: lx, z: lz, w });
   }
+  return labels;
+}
+
+// True when something of this height at (x, z) would stand between the camera
+// (in front, +z) and a label, hiding part of it.
+export function hidesLabel(spots, x, z, r, height) {
+  const shadow = height * 0.75 + r;
+  return spots.some(({ label: l }) => l && x > l.x0 - r && x < l.x1 + r && z > l.z1 - 0.1 && z < l.z1 + shadow);
 }

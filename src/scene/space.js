@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { CROSSINGS, LANE_COUNT } from '../engine/board.js';
-import { BOARD, ROAD_WIDTH, SPINNER_POS, crossingCenter, crossingRadius, distanceToRoads, laneSquare } from './layout.js';
+import { BOARD, META_HALF, ROAD_WIDTH, SPINNER_POS, crossingCenter, crossingRadius, distanceToRoads, laneSquare, metaDistance } from './layout.js';
 
 // Shared furniture positions and the "is this spot free for a prop?" test.
 
@@ -34,5 +34,6 @@ export function isFree(x, z, r, { road = 0.35, river = 0.6 } = {}) {
   _v.set(x, 0, z);
   for (const c of CROSSINGS) if (crossingCenter(c.id).distanceTo(_v) < crossingRadius(c.id) + 0.5 + r) return false;
   for (let lane = 0; lane < LANE_COUNT; lane++) if (laneSquare(lane, 0).pos.distanceTo(_v) < 1.25 + r) return false;
+  if (metaDistance(x, z) < META_HALF + road + r) return false;
   return distanceToRoads(x, z) > ROAD_WIDTH / 2 + road + r;
 }

@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { CROSSINGS } from '../engine/board.js';
 import { BOARD, COURTHOUSE_POS, ROAD_WIDTH, crossingCenter, crossingRadius, distanceToRoads } from './layout.js';
-import { buildLandmarks } from './landmarks.js';
+import { buildLandmarks, hidesLabel } from './landmarks.js';
 import { mergeStatic } from './merge.js';
 import { UBA } from './palette.js';
 import { PrintedBoard } from './printed.js';
@@ -158,9 +158,11 @@ function buildTown(group, rnd, spots) {
     // Buildings line the roads: keep them close to one.
     if (distanceToRoads(x, z) > ROAD_WIDTH / 2 + 0.3 + r + 1.6) continue;
     if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + r + 0.15)) continue;
+    const towerH = 1.2 + rnd() * 1.3;
+    if (hidesLabel(spots, x, z, r, kind < 0.12 ? 2.2 : kind < 0.4 ? towerH : 1)) continue;
     let b;
     if (kind < 0.12) b = church(white, roofs[0]);
-    else if (kind < 0.4) b = tower(white, glass, 0.7 + rnd() * 0.3, 0.7 + rnd() * 0.3, 1.2 + rnd() * 1.3);
+    else if (kind < 0.4) b = tower(white, glass, 0.7 + rnd() * 0.3, 0.7 + rnd() * 0.3, towerH);
     else b = house(white, roofs[Math.floor(rnd() * roofs.length)], 0.7 + rnd() * 0.35, 0.7 + rnd() * 0.4, 0.45 + rnd() * 0.25);
     b.position.set(x, 0, z);
     b.rotation.y = Math.round(rnd() * 4) * (Math.PI / 2) + (rnd() - 0.5) * 0.4;
@@ -181,6 +183,7 @@ function buildTrees(group, rnd, spots, quality) {
     const z = (rnd() - 0.5) * BOARD.depth;
     if (!isFree(x, z, 0.4, { road: 0.25, river: 0.15 })) continue;
     if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 0.5)) continue;
+    if (hidesLabel(spots, x, z, 0.4, 1.3)) continue;
     const t = new THREE.Group();
     const h = 0.4 + rnd() * 0.4;
     const trunk = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, h, 8), trunkMat));

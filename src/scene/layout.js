@@ -416,6 +416,12 @@ export function distanceToRoads(x, z) {
     const d = (p.x - x) ** 2 + (p.z - z) ** 2;
     if (d < best) best = d;
   }
+  return Math.min(Math.sqrt(best), metaDistance(x, z));
+}
+
+// Distance to the centre line of the meta avenue, which is wider than a road.
+export function metaDistance(x, z) {
+  let best = Infinity;
   for (const p of META_LINE) {
     const d = (p.x - x) ** 2 + (p.z - z) ** 2;
     if (d < best) best = d;
