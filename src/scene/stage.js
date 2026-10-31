@@ -454,7 +454,7 @@ export class Stage {
     }
     for (const piece of this.pieces.values()) {
       piece.traverse((o) => {
-        if (o.userData?.bob) o.position.y = 0.66 + Math.sin(this.time * 3 + piece.position.x) * 0.05;
+        if (o.userData?.bob) o.position.y = o.userData.bob + Math.sin(this.time * 3 + piece.position.x) * 0.05;
       });
     }
   }

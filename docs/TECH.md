@@ -127,6 +127,7 @@ Si cambia el formato, subir `SESSION_VERSION` en `session.js`: las partidas viej
 - Materiales tipo plástico con barniz (clearcoat) para fichas, casillas, monumentos y edificios.
 - La geometría estática se une por material (`merge.js`): unas 170 llamadas de dibujo por cuadro contando el pase de sombras.
 - Calidad (Configuración > Presentación): **Alta** (resolución hasta 1,5×, sombras 4096, posprocesado completo), **Media** (1×, 2048, posprocesado completo), **Baja** (1×, sin sombras ni posprocesado, menos árboles). El costo crece con la cantidad de píxeles: en una Radeon Pro 5500M, a 1920×1080, Alta cuesta unos 26 ms de GPU por cuadro a 1,5× y unos 44 ms a 2×.
+- ¿Por qué no un motor nativo? Se probó Godot 4.7 en la MacBook Pro de la presentación (Intel + Radeon Pro 5500M). En esa Mac Godot no tiene Metal nativo (solo en Apple Silicon) y pasa por MoltenVK: el renderizador con efectos avanzados no supera unos 25 cuadros por segundo ni con la escena casi vacía, y el renderizador rápido (OpenGL) tiene las mismas capacidades que WebGL. Three.js en Chrome dibuja el tablero completo con efectos en unos 11 ms. En una Mac Apple Silicon convendría volver a evaluarlo.
 - Si el equipo no sostiene unos 45 cuadros por segundo, cada 2 segundos se resigna algo: primero resolución (de a 0,25× hasta 1×), después el tilt-shift y por último la oclusión ambiental.
 
 ## Pruebas
