@@ -51,6 +51,13 @@ El juego no muestra nada de este documento. Sirve para pensar qué tipo de pregu
 
 **Uso en el juego.** Carta de Accidente en los cruces: es el caso natural para los choques entre equipos. Pregunta sobre prioridad de paso; Apelación sobre la exclusión de cobertura.
 
+**Rotondas donde encaja** (ver la tabla en [../DESIGN.md](../DESIGN.md#rotondas-quién-se-cruza-con-quién)):
+
+- Rotonda 7 (Taxi · Moto): choque entre un profesional del transporte y una moto.
+- Rotonda 6 (Plataforma · Colectivo) y rotonda 4 (Taxi · Colectivo · Plataforma): el choque de tres permite discutir concurrencia de responsables y el rol de la plataforma (también conecta con el Caso 2).
+- Rotonda 1 (Colectivo · Taxi): se combina con el Caso 1 si hay una pasajera lesionada en el colectivo.
+- Rotonda 5 (Auto particular · Remis · Moto) y rotonda 8 (Remis · Auto particular): seguro particular vs. uso comercial.
+
 ## Cómo pasar esto a cartas
 
 Ver el formato en [../MANTENIMIENTO.md](../MANTENIMIENTO.md#cargar-el-contenido-jurídico-real) y el ejemplo [contenido-ejemplo.json](contenido-ejemplo.json).

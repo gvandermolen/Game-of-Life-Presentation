@@ -20,8 +20,8 @@ Criterios de éxito:
 | Idioma | Español rioplatense |
 | Quién opera | Solo los expositores. Los equipos del aula discuten y responden en voz alta |
 | Equipos | 2 a 6. Por defecto: Colectivo, Taxi, Auto particular, Plataforma (Uber/Cabify), Moto, Remis |
-| Tablero | Un carril por transporte, en paralelo; los carriles se unen en 3 cruces |
-| Choques | Parada obligatoria en cada cruce; si ya hay otro equipo, hay choque |
+| Tablero | Una ruta sinuosa por transporte. Las rutas se trenzan y se cruzan físicamente en 8 rotondas |
+| Choques | Parada obligatoria en cada cruce; si ya hay otro equipo **en esa misma rotonda**, hay choque |
 | Resolución de choque | Carta conjunta; ambos equipos argumentan; los expositores eligen quién prevalece |
 | Casillas | Tipadas: pregunta, dilema, apelación, multa, bonus, control, libre |
 | Cartas | 2 o 4 opciones; veredicto de los expositores (correcta, incorrecta, anular) |
@@ -35,8 +35,25 @@ Criterios de éxito:
 
 Todos los valores se cambian en Configuración > Reglas, y el cambio queda en el historial.
 
-- Cada turno, el equipo gira la ruleta (1 a 10) y avanza por su carril.
-- **Cruce** (casillas 8, 18 y 27): parada obligatoria. Si al llegar ya hay otro equipo, hay **choque**: carta conjunta y los expositores eligen quién prevalece. Quien no prevalece retrocede 2 casillas (o pierde un turno, o ambas cosas). "Sin responsable" no penaliza a nadie.
+- Cada turno, el equipo gira la ruleta (1 a 10) y avanza por su ruta.
+- **Cruce** (casillas 8, 18 y 27 de cada ruta): parada obligatoria en una rotonda compartida con otras rutas. Si al llegar ya hay otro equipo en esa rotonda, hay **choque**: carta conjunta y los expositores eligen quién prevalece. Quien no prevalece retrocede 2 casillas (o pierde un turno, o ambas cosas). "Sin responsable" no penaliza a nadie.
+
+### Rotondas: quién se cruza con quién
+
+Cada ruta pasa por 3 rotondas y en cada una se encuentra con rivales distintos. Sirve para asignar los casos: una rotonda es el lugar natural de la carta de accidente entre esos transportes.
+
+| Rotonda | Casilla | Rutas que se cruzan |
+| --- | --- | --- |
+| 1 | 8 | Colectivo · Taxi |
+| 2 | 8 | Auto particular · Plataforma |
+| 3 | 8 | Moto · Remis |
+| 4 | 18 | Taxi · Colectivo · Plataforma |
+| 5 | 18 | Auto particular · Remis · Moto |
+| 6 | 27 | Plataforma · Colectivo |
+| 7 | 27 | Taxi · Moto |
+| 8 | 27 | Remis · Auto particular |
+
+Si se juega con menos equipos, las rotondas de rutas apagadas quedan grises y no generan choques.
 - **Pregunta**: carta de 4 opciones. Correcta +1, incorrecta 0.
 - **Dilema**: carta de 2 posturas. Correcta +2, incorrecta −1.
 - **Apelación**: carta de 2 opciones. Si prospera +3.
@@ -52,9 +69,9 @@ Todos los valores se cambian en Configuración > Reglas, y el cambio queda en el
 
 ### Composición de casillas
 
-Cada carril tiene exactamente las mismas cantidades de cada tipo, en distinto orden (rotación por tramos), así ningún transporte tiene ventaja.
+Cada ruta tiene exactamente las mismas cantidades de cada tipo, en distinto orden (rotación por tramos), así ningún transporte tiene ventaja.
 
-| Tipo | Por carril |
+| Tipo | Por ruta |
 | --- | --- |
 | Libre | 9 |
 | Pregunta | 5 |
@@ -67,11 +84,11 @@ Cada carril tiene exactamente las mismas cantidades de cada tipo, en distinto or
 
 ## Tablero
 
-- Mesa de madera, tablero con marco azul UBA y filete dorado, paño verde.
-- Camino en herradura alrededor de la ruleta central. Seis carriles paralelos con franja de color del equipo.
-- Bandas de ancho completo en Salida, en los 3 cruces (asfalto, senda peatonal, semáforos) y en la Meta (dorada).
-- La Meta desemboca en un Palacio de Justicia con columnas, cúpula dorada y bandera argentina.
-- Paisaje: Obelisco, casas, edificios y árboles en plástico pastel, como el juego original.
+- Mesa de madera barnizada, tablero con marco azul UBA y filete dorado.
+- Tablero "impreso" como el cartón del juego de 1960: parches de colores (mostaza, naranja, verdes), rayado litográfico, grano de papel, pliegue central y viñeta envejecida. Barrios porteños impresos (Palermo, Recoleta, La Boca…) y el Riachuelo cruzando al frente, con puentes de baranda blanca.
+- Seis rutas de asfalto con borde del color del equipo que salen de un círculo "SALIDA" con el nombre del transporte, serpentean y se cruzan en 8 rotondas numeradas (asfalto, sendas peatonales en cada entrada, arcos con los colores de los equipos que se encuentran, semáforo). Las casillas están impresas sobre la ruta con relieve.
+- La Meta es una banda dorada a cuadros a lo ancho del fondo; detrás, el Palacio de Justicia sobre una plaza.
+- Relieve en plástico como el original: montañas verdes brillantes, edificios, iglesias y casas blancas junto a las rutas, árboles, Obelisco. La ruleta está sobre una colina verde en el centro.
 - Fuera del tablero, sobre la mesa: mazos de Preguntas, Dilemas, Apelaciones y Accidentes.
 - Fichas: cada transporte es un vehículo de juguete brillante sobre una base redonda del color del equipo. El taxi es negro con techo amarillo, como en Buenos Aires.
 

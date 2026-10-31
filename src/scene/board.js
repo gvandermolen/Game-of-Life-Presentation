@@ -1,36 +1,21 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { LANES, LANE_COUNT, LANE_LENGTH, CRUCES } from '../engine/board.js';
-import {
-  BOARD,
-  BAND_LENGTH,
-  LANE_SPACING,
-  ROAD_HALF,
-  SPINNER_POS,
-  STATIONS,
-  bandFrame,
-  curve,
-  distanceToRoad,
-  frameAt,
-  isBandIndex,
-  laneOffset,
-  laneSquare,
-  tileSize,
-} from './layout.js';
+import { CROSSINGS, LANE_COUNT } from '../engine/board.js';
+import { BOARD, COURTHOUSE_POS, ROAD_WIDTH, crossingCenter, crossingRadius, distanceToRoads, laneFrame } from './layout.js';
 import { mergeStatic } from './merge.js';
-import { SQUARE_STYLE, UBA } from './palette.js';
-import { bandTexture, deckTexture, feltTexture, signTexture, tileLabel, woodTexture } from './textures.js';
+import { UBA } from './palette.js';
+import { PrintedBoard, RIVER, RIVER_WIDTH, isFree, riverDistance } from './printed.js';
+import { deckTexture, makeNoise, signTexture, woodTexture } from './textures.js';
 
-const TILE_H = 0.2;
-const ROAD_Y = 0.04;
+const PIECE_Y = 0.02;
 
 function plastic(color, extra = {}) {
   return new THREE.MeshPhysicalMaterial({
     color,
-    roughness: 0.36,
+    roughness: 0.34,
     metalness: 0,
-    clearcoat: 0.55,
-    clearcoatRoughness: 0.28,
+    clearcoat: 0.6,
+    clearcoatRoughness: 0.25,
     ...extra,
   });
 }
@@ -41,67 +26,6 @@ function shadowed(mesh, cast = true, receive = true) {
   return mesh;
 }
 
-// Choose the decal rotation (multiples of `step`) whose "up" points most toward the camera's up (-z).
-function readableYaw(heading, step) {
-  const base = heading - Math.PI / 2;
-  let best = base;
-  let bestAbs = Infinity;
-  for (let m = -4; m <= 4; m++) {
-    const yaw = base + m * step;
-    const w = Math.atan2(Math.sin(yaw), Math.cos(yaw));
-    if (Math.abs(w) < bestAbs) {
-      bestAbs = Math.abs(w);
-      best = w;
-    }
-  }
-  return best;
-}
-
-function decal(texture, w, h, y) {
-  const g = new THREE.PlaneGeometry(w, h);
-  g.rotateX(-Math.PI / 2);
-  const m = new THREE.MeshStandardMaterial({
-    map: texture,
-    transparent: true,
-    roughness: 0.55,
-    polygonOffset: true,
-    polygonOffsetFactor: -2,
-  });
-  const mesh = new THREE.Mesh(g, m);
-  mesh.position.y = y;
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-// Flat ribbon that follows the centreline at a lateral offset.
-function ribbon(u0, u1, offset, halfWidth, y, material, samples = 220) {
-  const pos = [];
-  const idx = [];
-  for (let i = 0; i <= samples; i++) {
-    const u = u0 + ((u1 - u0) * i) / samples;
-    const { p, normal } = frameAt(Math.min(1, Math.max(0, u)));
-    const c = p.clone().addScaledVector(normal, offset);
-    const l = c.clone().addScaledVector(normal, -halfWidth);
-    const r = c.clone().addScaledVector(normal, halfWidth);
-    pos.push(l.x, y, l.z, r.x, y, r.z);
-    if (i < samples) {
-      const a = i * 2;
-      idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2);
-    }
-  }
-  const g = new THREE.BufferGeometry();
-  g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  g.setIndex(idx);
-  g.computeVertexNormals();
-  const mesh = new THREE.Mesh(g, material);
-  mesh.receiveShadow = true;
-  return mesh;
-}
-
-function mix(hex, toward = '#ffffff', amount = 0.55) {
-  return new THREE.Color(hex).lerp(new THREE.Color(toward), amount);
-}
-
 function seeded(seed) {
   let s = seed;
   return () => ((s = (s * 16807) % 2147483647) / 2147483647);
@@ -109,18 +33,18 @@ function seeded(seed) {
 
 function buildTable(group, quality) {
   const wood = woodTexture(quality === 'bajo' ? 512 : 1024);
-  const mat = new THREE.MeshStandardMaterial({ map: wood, roughness: 0.62, metalness: 0 });
+  const mat = new THREE.MeshPhysicalMaterial({ map: wood, bumpMap: wood, bumpScale: 1.2, roughness: 0.55, clearcoat: 0.35, clearcoatRoughness: 0.4 });
   const table = new THREE.Mesh(new THREE.BoxGeometry(150, 2, 110), mat);
   table.position.y = -1 - BOARD.height;
   table.receiveShadow = true;
   group.add(table);
 }
 
-function buildBoardBody(group) {
+function buildBoardBody(group, printed) {
   const frame = shadowed(
     new THREE.Mesh(
-      new RoundedBoxGeometry(BOARD.width + 1.4, BOARD.height, BOARD.depth + 1.4, 4, 0.45),
-      new THREE.MeshPhysicalMaterial({ color: UBA.navy, roughness: 0.42, clearcoat: 0.4 }),
+      new RoundedBoxGeometry(BOARD.width + 1.2, BOARD.height, BOARD.depth + 1.2, 4, 0.4),
+      new THREE.MeshPhysicalMaterial({ color: UBA.navy, roughness: 0.4, clearcoat: 0.5, clearcoatRoughness: 0.3 }),
     ),
   );
   frame.position.y = -BOARD.height / 2 - 0.02;
@@ -128,140 +52,265 @@ function buildBoardBody(group) {
 
   const trim = shadowed(
     new THREE.Mesh(
-      new RoundedBoxGeometry(BOARD.width + 0.5, 0.06, BOARD.depth + 0.5, 2, 0.2),
-      new THREE.MeshStandardMaterial({ color: UBA.gold, roughness: 0.3, metalness: 0.65 }),
+      new RoundedBoxGeometry(BOARD.width + 0.42, 0.06, BOARD.depth + 0.42, 2, 0.18),
+      new THREE.MeshStandardMaterial({ color: UBA.gold, roughness: 0.3, metalness: 0.7 }),
     ),
     false,
   );
-  trim.position.y = -0.03;
+  trim.position.y = -0.04;
   group.add(trim);
 
-  const felt = new THREE.MeshStandardMaterial({ map: feltTexture(512, [118, 172, 92]), roughness: 0.92 });
-  const top = new THREE.Mesh(new RoundedBoxGeometry(BOARD.width, 0.1, BOARD.depth, 2, 0.04), felt);
-  top.position.y = -0.04;
+  const geo = new THREE.PlaneGeometry(BOARD.width, BOARD.depth);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.MeshPhysicalMaterial({
+    map: printed.map,
+    bumpMap: printed.bump,
+    bumpScale: 2.2,
+    roughness: 0.62,
+    clearcoat: 0.28,
+    clearcoatRoughness: 0.42,
+  });
+  const top = new THREE.Mesh(geo, mat);
+  top.position.y = 0.005;
   top.receiveShadow = true;
+  top.userData.dynamic = true;
   group.add(top);
 }
 
-function buildRoad(group) {
-  const u0 = STATIONS[0] - 0.008;
-  const u1 = STATIONS[LANE_LENGTH] + 0.008;
-  const edge = new THREE.MeshStandardMaterial({ color: '#E9DCC0', roughness: 0.8 });
-  group.add(ribbon(u0, u1, 0, ROAD_HALF + 0.35, 0.012, edge, 400));
-  const bed = new THREE.MeshStandardMaterial({ color: '#4A4F5C', roughness: 0.85 });
-  group.add(ribbon(u0, u1, 0, ROAD_HALF, 0.022, bed, 400));
+// Lumpy glossy plastic mountain, like the green hills of the original board.
+function mountainGeometry(radius, height, seed) {
+  const geo = new THREE.SphereGeometry(1, 64, 32);
+  const n = makeNoise(seed);
+  const p = geo.attributes.position;
+  const v = new THREE.Vector3();
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const bump = 0.78 + n(v.x * 1.8 + 5, v.z * 1.8 + v.y * 1.3 + 5) * 0.45;
+    const y = Math.max(0, v.y);
+    p.setXYZ(i, v.x * radius * bump, Math.pow(y, 0.85) * height * (0.85 + bump * 0.2), v.z * radius * bump);
+  }
+  geo.computeVertexNormals();
+  return geo;
 }
 
-function buildLaneRibbons(group, roster) {
-  const pad = 0.018;
-  const breaks = [0, ...CRUCES, LANE_LENGTH].map((k) => STATIONS[k]);
-  const mats = [];
-  for (let lane = 0; lane < LANE_COUNT; lane++) {
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.7 });
-    mats.push(mat);
-    for (let i = 0; i < breaks.length - 1; i++) {
-      group.add(ribbon(breaks[i] + pad, breaks[i + 1] - pad, laneOffset(lane), LANE_SPACING * 0.47, ROAD_Y, mat, 80));
+function buildMountains(group, rnd, spots) {
+  const greens = ['#4E9A3E', '#5FAE48', '#3F8A3A'].map((c) => plastic(c, { roughness: 0.3, clearcoat: 0.8 }));
+  const snow = plastic('#F5F2EA', { roughness: 0.3 });
+  let placed = 0;
+  for (let tries = 0; tries < 4000 && placed < 7; tries++) {
+    const r = 1.3 + rnd() * 1.0;
+    const x = (rnd() - 0.5) * BOARD.width;
+    const z = (rnd() - 0.5) * BOARD.depth;
+    if (!isFree(x, z, r, { road: 0.45 })) continue;
+    if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + r + 0.4)) continue;
+    const h = 0.9 + rnd() * 1.1;
+    const m = shadowed(new THREE.Mesh(mountainGeometry(r, h, 11 + placed), greens[placed % greens.length]));
+    m.position.set(x, 0, z);
+    m.rotation.y = rnd() * Math.PI;
+    group.add(m);
+    if (h > 1.5) {
+      const cap = shadowed(new THREE.Mesh(mountainGeometry(r * 0.32, h * 0.25, 40 + placed), snow));
+      cap.position.set(x, h * 0.86, z);
+      group.add(cap);
     }
-  }
-  recolorLanes(mats, roster);
-  return mats;
-}
-
-export function recolorLanes(mats, roster) {
-  mats.forEach((mat, lane) => {
-    const team = roster.find((t) => t.lane === lane && t.enabled);
-    mat.color.copy(team ? mix(team.color, '#ffffff', 0.35) : new THREE.Color('#9a9488'));
-  });
-}
-
-function buildTiles(group) {
-  const mats = {};
-  const labels = {};
-  for (const type of Object.keys(SQUARE_STYLE)) {
-    mats[type] = plastic(SQUARE_STYLE[type].color);
-    labels[type] = tileLabel(type);
-  }
-  for (let lane = 0; lane < LANE_COUNT; lane++) {
-    for (let k = 1; k < LANE_LENGTH; k++) {
-      if (isBandIndex(k)) continue;
-      const type = LANES[lane][k];
-      const { pos, heading } = laneSquare(lane, k);
-      const { width, length } = tileSize(lane, k);
-      const tile = shadowed(new THREE.Mesh(new RoundedBoxGeometry(length, TILE_H, width, 2, 0.07), mats[type]));
-      tile.position.set(pos.x, ROAD_Y + TILE_H / 2, pos.z);
-      tile.rotation.y = heading;
-      group.add(tile);
-
-      const size = Math.min(width, length) * 0.94;
-      const d = decal(labels[type], size, size, ROAD_Y + TILE_H + 0.004);
-      d.position.x = pos.x;
-      d.position.z = pos.z;
-      d.rotation.y = readableYaw(heading, Math.PI / 2);
-      group.add(d);
-    }
+    spots.push({ x, z, r });
+    placed++;
   }
 }
 
-function buildBands(group) {
-  const across = ROAD_HALF * 2 + 0.3;
-  const list = [
-    { k: 0, type: 'salida' },
-    ...CRUCES.map((k, i) => ({ k, type: 'cruce', n: i + 1 })),
-    { k: LANE_LENGTH, type: 'meta' },
-  ];
-  for (const { k, type, n } of list) {
-    const { pos, heading } = bandFrame(k);
-    const color = SQUARE_STYLE[type].color;
-    const mat = type === 'meta' ? new THREE.MeshPhysicalMaterial({ color, roughness: 0.25, metalness: 0.55, clearcoat: 0.6 }) : plastic(color);
-    const band = shadowed(new THREE.Mesh(new RoundedBoxGeometry(BAND_LENGTH, TILE_H + 0.04, across, 3, 0.12), mat));
-    band.position.set(pos.x, ROAD_Y + (TILE_H + 0.04) / 2, pos.z);
-    band.rotation.y = heading;
-    group.add(band);
-
-    const tex = bandTexture(type, n);
-    const d = decal(tex, across - 0.2, BAND_LENGTH - 0.16, ROAD_Y + TILE_H + 0.045);
-    d.position.x = pos.x;
-    d.position.z = pos.z;
-    d.rotation.y = readableYaw(heading, Math.PI);
-    group.add(d);
-
-    if (type === 'cruce') {
-      const { normal } = frameAt(STATIONS[k]);
-      buildTrafficLight(group, pos.clone().addScaledVector(normal, ROAD_HALF + 1.0), heading);
-      buildTrafficLight(group, pos.clone().addScaledVector(normal, -(ROAD_HALF + 1.0)), heading + Math.PI);
-    }
-  }
-}
-
-function buildTrafficLight(group, at, heading) {
+// White plastic buildings, like the 3D pieces of the vintage board.
+function house(white, roofMat, w, d, h) {
   const g = new THREE.Group();
-  const dark = new THREE.MeshStandardMaterial({ color: '#23262e', roughness: 0.5 });
-  const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 2.2, 12), dark));
-  pole.position.y = 1.1;
+  const body = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.04), white));
+  body.position.y = h / 2;
+  g.add(body);
+  const roofShape = new THREE.Shape();
+  roofShape.moveTo(-w / 2 - 0.08, 0);
+  roofShape.lineTo(w / 2 + 0.08, 0);
+  roofShape.lineTo(0, w * 0.48);
+  roofShape.closePath();
+  const roofGeo = new THREE.ExtrudeGeometry(roofShape, { depth: d + 0.1, bevelEnabled: false });
+  roofGeo.translate(0, 0, -(d + 0.1) / 2);
+  const roof = shadowed(new THREE.Mesh(roofGeo, roofMat));
+  roof.position.y = h;
+  g.add(roof);
+  return g;
+}
+
+function tower(white, glass, w, d, h) {
+  const g = new THREE.Group();
+  const body = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.04), white));
+  body.position.y = h / 2;
+  g.add(body);
+  for (let f = 0; f < Math.floor((h - 0.3) / 0.34); f++) {
+    const band = new THREE.Mesh(new THREE.BoxGeometry(w + 0.01, 0.1, d + 0.01), glass);
+    band.position.y = 0.32 + f * 0.34;
+    g.add(band);
+  }
+  return g;
+}
+
+function church(white, roofMat) {
+  const g = house(white, roofMat, 0.8, 1.3, 0.7);
+  const t = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.42, 1.3, 0.42, 2, 0.03), white));
+  t.position.set(0, 0.65, 0.75);
+  g.add(t);
+  const spire = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.7, 4), roofMat));
+  spire.position.set(0, 1.65, 0.75);
+  spire.rotation.y = Math.PI / 4;
+  g.add(spire);
+  return g;
+}
+
+function buildTown(group, rnd, spots) {
+  const white = plastic('#F6F3EC', { roughness: 0.3, clearcoat: 0.7 });
+  const roofs = [plastic('#C9503A'), plastic('#F6F3EC', { roughness: 0.3 }), plastic(UBA.navy)];
+  const glass = new THREE.MeshPhysicalMaterial({ color: '#7FA9C9', roughness: 0.1, metalness: 0.2, clearcoat: 1 });
+  let placed = 0;
+  for (let tries = 0; tries < 6000 && placed < 22; tries++) {
+    const x = (rnd() - 0.5) * BOARD.width;
+    const z = (rnd() - 0.5) * BOARD.depth;
+    const kind = rnd();
+    const r = kind < 0.12 ? 0.9 : 0.6;
+    if (!isFree(x, z, r, { road: 0.3 })) continue;
+    // Buildings line the roads: keep them close to one.
+    if (distanceToRoads(x, z) > ROAD_WIDTH / 2 + 0.3 + r + 1.6) continue;
+    if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + r + 0.15)) continue;
+    let b;
+    if (kind < 0.12) b = church(white, roofs[0]);
+    else if (kind < 0.4) b = tower(white, glass, 0.7 + rnd() * 0.3, 0.7 + rnd() * 0.3, 1.2 + rnd() * 1.3);
+    else b = house(white, roofs[Math.floor(rnd() * roofs.length)], 0.7 + rnd() * 0.35, 0.7 + rnd() * 0.4, 0.45 + rnd() * 0.25);
+    b.position.set(x, 0, z);
+    b.rotation.y = Math.round(rnd() * 4) * (Math.PI / 2) + (rnd() - 0.5) * 0.4;
+    group.add(b);
+    spots.push({ x, z, r });
+    placed++;
+  }
+}
+
+const TREE_GREENS = ['#3F8F4A', '#5BAF3A', '#2F7D4E', '#74B85A'];
+
+function buildTrees(group, rnd, spots, quality) {
+  const trunkMat = new THREE.MeshStandardMaterial({ color: '#7A4E32', roughness: 0.8 });
+  const leafMats = TREE_GREENS.map((c) => plastic(c, { clearcoat: 0.35, roughness: 0.45 }));
+  const count = quality === 'bajo' ? 18 : 30;
+  for (let i = 0, tries = 0; i < count && tries < 4000; tries++) {
+    const x = (rnd() - 0.5) * BOARD.width;
+    const z = (rnd() - 0.5) * BOARD.depth;
+    if (!isFree(x, z, 0.4, { road: 0.25, river: 0.15 })) continue;
+    if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 0.5)) continue;
+    const t = new THREE.Group();
+    const h = 0.4 + rnd() * 0.4;
+    const trunk = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, h, 8), trunkMat));
+    trunk.position.y = h / 2;
+    t.add(trunk);
+    const leaf = leafMats[Math.floor(rnd() * leafMats.length)];
+    if (rnd() < 0.55) {
+      const crown = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.4 + rnd() * 0.15, 20, 14), leaf));
+      crown.position.y = h + 0.28;
+      t.add(crown);
+    } else {
+      for (let j = 0; j < 2; j++) {
+        const cone = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.42 - j * 0.11, 0.62, 16), leaf));
+        cone.position.y = h + 0.18 + j * 0.34;
+        t.add(cone);
+      }
+    }
+    t.position.set(x, 0, z);
+    t.scale.setScalar(0.8 + rnd() * 0.35);
+    group.add(t);
+    spots.push({ x, z, r: 0.4 });
+    i++;
+  }
+}
+
+function buildBridges(group) {
+  const rail = plastic('#F4F1EA', { roughness: 0.35 });
+  const post = plastic('#E2DCCD', { roughness: 0.4 });
+  for (let lane = 0; lane < LANE_COUNT; lane++) {
+    let best = 0;
+    let bestD = Infinity;
+    for (let i = 0; i < 600; i++) {
+      const p = laneFrame(lane, i / 599).p;
+      const d = riverDistance(p.x, p.z);
+      if (d < bestD) {
+        bestD = d;
+        best = i / 599;
+      }
+    }
+    if (bestD > 0.3) continue;
+    const { p, tangent, normal } = laneFrame(lane, best);
+    const len = RIVER_WIDTH + 0.9;
+    for (const s of [-1, 1]) {
+      const c = p.clone().addScaledVector(normal, s * (ROAD_WIDTH / 2 + 0.12));
+      const bar = shadowed(new THREE.Mesh(new RoundedBoxGeometry(len, 0.08, 0.1, 1, 0.03), rail));
+      bar.position.set(c.x, 0.22, c.z);
+      bar.rotation.y = Math.atan2(-tangent.z, tangent.x);
+      group.add(bar);
+      for (const e of [-0.5, 0, 0.5]) {
+        const q = c.clone().addScaledVector(tangent, e * len);
+        const pp = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.1), post));
+        pp.position.set(q.x, 0.11, q.z);
+        group.add(pp);
+      }
+    }
+  }
+}
+
+function buildTrafficLight(group, at, facing) {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: '#23262e', roughness: 0.45 });
+  const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.5, 10), dark));
+  pole.position.y = 0.75;
   g.add(pole);
-  const box = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.38, 0.95, 0.34, 2, 0.08), dark));
-  box.position.y = 2.35;
+  const box = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.72, 0.26, 2, 0.06), dark));
+  box.position.y = 1.65;
   g.add(box);
-  const colors = ['#ff3b2f', '#ffb300', '#2fd25a'];
-  colors.forEach((c, i) => {
+  ['#ff3b2f', '#ffb300', '#2fd25a'].forEach((c, i) => {
     const lamp = new THREE.Mesh(
-      new THREE.SphereGeometry(0.1, 16, 12),
-      new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i === 2 ? 1.6 : 0.25 }),
+      new THREE.SphereGeometry(0.075, 14, 10),
+      new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i === 0 ? 1.8 : 0.2 }),
     );
-    lamp.position.set(0.18, 2.66 - i * 0.3, 0);
+    lamp.position.set(0, 1.88 - i * 0.22, 0.13);
     g.add(lamp);
   });
   g.position.copy(at);
-  g.rotation.y = heading;
+  g.rotation.y = facing;
   group.add(g);
 }
 
+function buildCrossingProps(group, spots) {
+  for (const c of CROSSINGS) {
+    const center = crossingCenter(c.id);
+    const R = crossingRadius(c.id) + 0.55;
+    // Best two free angles around the plaza.
+    const cands = [];
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
+      const x = center.x + Math.cos(a) * R;
+      const z = center.z + Math.sin(a) * R;
+      cands.push({ a, x, z, d: distanceToRoads(x, z) });
+    }
+    cands.sort((p, q) => q.d - p.d);
+    const chosen = [];
+    for (const p of cands) {
+      if (p.d < ROAD_WIDTH / 2 + 0.25) break;
+      if (chosen.some((q) => Math.abs(Math.atan2(Math.sin(p.a - q.a), Math.cos(p.a - q.a))) < 1.6)) continue;
+      chosen.push(p);
+      if (chosen.length === 2) break;
+    }
+    for (const p of chosen) {
+      buildTrafficLight(group, new THREE.Vector3(p.x, 0, p.z), Math.atan2(center.x - p.x, center.z - p.z));
+      spots.push({ x: p.x, z: p.z, r: 0.3 });
+    }
+  }
+}
+
 function buildCourthouse(group) {
-  const { pos, tangent, heading } = bandFrame(LANE_LENGTH);
   const g = new THREE.Group();
-  const stone = new THREE.MeshStandardMaterial({ color: '#EFE6D2', roughness: 0.7 });
-  const stoneDark = new THREE.MeshStandardMaterial({ color: '#D9CDB3', roughness: 0.75 });
-  const gold = new THREE.MeshStandardMaterial({ color: UBA.gold, roughness: 0.3, metalness: 0.7 });
+  const stone = plastic('#F3EEE3', { roughness: 0.4, clearcoat: 0.45 });
+  const stoneDark = plastic('#DCD3C0', { roughness: 0.5, clearcoat: 0.3 });
+  const gold = new THREE.MeshStandardMaterial({ color: UBA.gold, roughness: 0.28, metalness: 0.75 });
 
   for (let i = 0; i < 3; i++) {
     const step = shadowed(new THREE.Mesh(new RoundedBoxGeometry(4.2 - i * 0.35, 0.18, 6.6 - i * 0.3, 2, 0.04), stoneDark));
@@ -290,23 +339,23 @@ function buildCourthouse(group) {
   ped.position.set(-0.3, 2.99, 0);
   g.add(ped);
 
-  const tower = shadowed(new THREE.Mesh(new RoundedBoxGeometry(1.4, 1.3, 1.6, 2, 0.05), stone));
-  tower.position.set(1.6, 3.6, 0);
-  g.add(tower);
-  const dome = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.75, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), gold));
-  dome.position.set(1.6, 4.25, 0);
+  const drum = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.9, 0.9, 32), stone));
+  drum.position.set(1.6, 3.4, 0);
+  g.add(drum);
+  const dome = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.82, 32, 16, 0, Math.PI * 2, 0, Math.PI / 2), gold));
+  dome.position.set(1.6, 3.85, 0);
   g.add(dome);
 
   const plaque = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.34), new THREE.MeshStandardMaterial({ map: signTexture('PALACIO DE JUSTICIA', { size: 46, h: 96, w: 768 }) }));
-  plaque.position.set(-0.41, 2.82, 0);
+  plaque.position.set(-0.46, 2.82, 0);
   plaque.rotation.y = -Math.PI / 2;
   g.add(plaque);
 
-  buildFlag(g, new THREE.Vector3(1.6, 4.9, 0));
+  buildFlag(g, new THREE.Vector3(1.6, 4.6, 0));
 
   g.scale.setScalar(0.62);
-  g.position.copy(pos).addScaledVector(tangent, BAND_LENGTH / 2 + 0.45);
-  g.rotation.y = heading;
+  g.position.copy(COURTHOUSE_POS);
+  g.rotation.y = Math.PI / 2;
   group.add(g);
 }
 
@@ -333,105 +382,32 @@ function buildFlag(group, at) {
   flag.position.copy(at).add(new THREE.Vector3(0, 1.32, 0.47));
   flag.rotation.y = Math.PI / 2;
   flag.castShadow = true;
-  flag.userData.flag = true;
   group.add(flag);
 }
 
-function buildObelisco(group, x, z) {
-  const g = new THREE.Group();
-  const white = new THREE.MeshStandardMaterial({ color: '#F5F1E8', roughness: 0.6 });
-  const plaza = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(1.7, 1.8, 0.12, 48), new THREE.MeshStandardMaterial({ color: '#E3D8C0', roughness: 0.8 })));
-  plaza.position.y = 0.06;
-  g.add(plaza);
-  const shaft = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.42, 5.4, 4, 1), white));
-  shaft.rotation.y = Math.PI / 4;
-  shaft.position.y = 0.12 + 2.7;
-  g.add(shaft);
-  const tip = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.31, 0.5, 4), white));
-  tip.rotation.y = Math.PI / 4;
-  tip.position.y = 0.12 + 5.4 + 0.25;
-  g.add(tip);
-  g.position.set(x, 0, z);
-  group.add(g);
-}
-
-const TREE_GREENS = ['#4FA35A', '#6BBF3A', '#3E8E5E', '#86C66B'];
-const HOUSE_COLORS = ['#F2C9A0', '#BDD7ED', '#F4EFE4', '#FCCD8E', '#E9B8C4', '#C9E3B8'];
-
-function buildScenery(group, rnd, quality) {
-  const trunkMat = new THREE.MeshStandardMaterial({ color: '#8A5A3B', roughness: 0.8 });
-  const leafMats = TREE_GREENS.map((c) => plastic(c, { clearcoat: 0.2, roughness: 0.55 }));
-  const roofMat = plastic('#C8553D');
-  const roofMat2 = plastic(UBA.navy);
-  const meta = bandFrame(LANE_LENGTH);
-  const spots = [{ x: meta.pos.x + meta.tangent.x * 2.2, z: meta.pos.z + meta.tangent.z * 2.2, r: 2.6 }];
-  const free = (x, z, r) =>
-    Math.abs(x) < BOARD.width / 2 - 0.8 &&
-    Math.abs(z) < BOARD.depth / 2 - 0.8 &&
-    distanceToRoad(x, z) > ROAD_HALF + 0.9 + r &&
-    Math.hypot(x - SPINNER_POS.x, z - SPINNER_POS.z) > 5.2 + r &&
-    Math.hypot(x + 8.6, z - 1.2) > 2.4 + r &&
-    spots.every((s) => Math.hypot(s.x - x, s.z - z) > s.r + r + 0.25);
-
-  const treeCount = quality === 'bajo' ? 28 : 46;
-  for (let i = 0, tries = 0; i < treeCount && tries < 3000; tries++) {
+function buildObelisco(group, spots, rnd) {
+  for (let tries = 0; tries < 3000; tries++) {
     const x = (rnd() - 0.5) * BOARD.width;
-    const z = (rnd() - 0.5) * BOARD.depth;
-    if (!free(x, z, 0.45)) continue;
-    const t = new THREE.Group();
-    const h = 0.5 + rnd() * 0.5;
-    const trunk = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.1, h, 8), trunkMat));
-    trunk.position.y = h / 2;
-    t.add(trunk);
-    const leaf = leafMats[Math.floor(rnd() * leafMats.length)];
-    if (rnd() < 0.5) {
-      const crown = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.42 + rnd() * 0.18, 20, 14), leaf));
-      crown.position.y = h + 0.3;
-      t.add(crown);
-    } else {
-      for (let j = 0; j < 2; j++) {
-        const cone = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.46 - j * 0.12, 0.7, 18), leaf));
-        cone.position.y = h + 0.2 + j * 0.38;
-        t.add(cone);
-      }
-    }
-    t.position.set(x, 0, z);
-    t.scale.setScalar(0.75 + rnd() * 0.4);
-    group.add(t);
-    spots.push({ x, z, r: 0.45 });
-    i++;
-  }
-
-  for (let i = 0, tries = 0; i < 14 && tries < 3000; tries++) {
-    const x = (rnd() - 0.5) * BOARD.width;
-    const z = (rnd() - 0.5) * BOARD.depth;
-    const tall = rnd() < 0.35;
-    const w = 0.9 + rnd() * 0.5;
-    const d = 0.9 + rnd() * 0.4;
-    const h = tall ? 1.6 + rnd() * 1.4 : 0.7 + rnd() * 0.3;
-    if (!free(x, z, Math.max(w, d) * 0.75)) continue;
+    const z = (rnd() - 0.5) * BOARD.depth * 0.6;
+    if (!isFree(x, z, 1.2, { road: 0.4 })) continue;
+    if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 1.4)) continue;
     const g = new THREE.Group();
-    const body = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w, h, d, 2, 0.05), plastic(HOUSE_COLORS[i % HOUSE_COLORS.length])));
-    body.position.y = h / 2;
-    g.add(body);
-    if (tall) {
-      const winMat = new THREE.MeshStandardMaterial({ color: '#2b3350', roughness: 0.2, metalness: 0.3 });
-      for (let f = 0; f < Math.floor(h / 0.45); f++) {
-        const win = new THREE.Mesh(new THREE.BoxGeometry(w * 0.8, 0.12, d + 0.02), winMat);
-        win.position.y = 0.35 + f * 0.45;
-        g.add(win);
-      }
-    } else {
-      const roof = shadowed(new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.78, 0.6, 4), rnd() < 0.5 ? roofMat : roofMat2));
-      roof.rotation.y = Math.PI / 4;
-      roof.position.y = h + 0.3;
-      g.add(roof);
-    }
+    const white = plastic('#F6F3EC', { roughness: 0.3 });
+    const plaza = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.12, 0.1, 40), plastic('#E3D8C0', { roughness: 0.6, clearcoat: 0.2 })));
+    plaza.position.y = 0.05;
+    g.add(plaza);
+    const shaft = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, 3.9, 4, 1), white));
+    shaft.rotation.y = Math.PI / 4;
+    shaft.position.y = 0.1 + 1.95;
+    g.add(shaft);
+    const tip = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.38, 4), white));
+    tip.rotation.y = Math.PI / 4;
+    tip.position.y = 0.1 + 3.9 + 0.19;
+    g.add(tip);
     g.position.set(x, 0, z);
-    g.rotation.y = rnd() * Math.PI;
     group.add(g);
-    spots.push({ x, z, r: Math.max(w, d) * 0.75 });
-    i++;
+    spots.push({ x, z, r: 1.2 });
+    return;
   }
 }
 
@@ -449,7 +425,7 @@ function buildDecks(group) {
     for (let j = 0; j < n; j++) {
       const card = shadowed(new THREE.Mesh(new RoundedBoxGeometry(2.6, 0.05, 1.85, 1, 0.02), cardMat));
       card.position.y = 0.03 + j * 0.055;
-      card.rotation.y = (Math.sin(i * 7 + j * 3) * 0.04);
+      card.rotation.y = Math.sin(i * 7 + j * 3) * 0.04;
       g.add(card);
     }
     const top = new THREE.Mesh(new THREE.PlaneGeometry(2.58, 1.83), new THREE.MeshStandardMaterial({ map: deckTexture(d.word, d.color), roughness: 0.5 }));
@@ -464,18 +440,21 @@ function buildDecks(group) {
 
 export function buildBoard(roster, quality) {
   const group = new THREE.Group();
+  const printed = new PrintedBoard(roster, quality);
   buildTable(group, quality);
-  buildBoardBody(group);
-  buildRoad(group);
-  const laneMaterials = buildLaneRibbons(group, roster);
-  buildTiles(group);
-  buildBands(group);
+  buildBoardBody(group, printed);
   buildCourthouse(group);
-  buildObelisco(group, -8.6, 1.2);
-  buildScenery(group, seeded(11), quality);
+  buildBridges(group);
+  const spots = [];
+  const rnd = seeded(11);
+  buildCrossingProps(group, spots);
+  buildMountains(group, rnd, spots);
+  buildObelisco(group, spots, rnd);
+  buildTown(group, rnd, spots);
+  buildTrees(group, rnd, spots, quality);
   buildDecks(group);
   mergeStatic(group);
-  return { group, laneMaterials };
+  return { group, printed };
 }
 
-export { TILE_H, ROAD_Y };
+export { PIECE_Y, RIVER };

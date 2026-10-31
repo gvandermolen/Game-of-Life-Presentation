@@ -1,4 +1,4 @@
-import { LANE_LENGTH, isCruce, squareAt } from './board.js';
+import { LANE_LENGTH, crossingAt, isCruce, squareAt } from './board.js';
 import { DEFAULT_RULES, mergeRules } from './rules.js';
 
 // The whole game is `history.reduce(reduce, createGame(roster))`.
@@ -96,12 +96,13 @@ function land(s, team) {
 
   switch (type) {
     case 'cruce': {
-      const others = s.teams.filter((t) => t !== team && !t.finished && t.pos === pos);
+      const id = crossingAt(team.lane, pos);
+      const others = s.teams.filter((t) => t !== team && !t.finished && crossingAt(t.lane, t.pos) === id);
       if (others.length) {
         const teams = [team.id, ...others.map((t) => t.id)];
         s.phase = 'collision';
-        s.pending = { kind: 'colision', cruce: pos, teams, seq: s.counters.colision++ };
-        s.events.push({ type: 'collision', cruce: pos, teams });
+        s.pending = { kind: 'colision', cruce: id, teams, seq: s.counters.colision++ };
+        s.events.push({ type: 'collision', cruce: id, teams });
         return;
       }
       return nextTurn(s);

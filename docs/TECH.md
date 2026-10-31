@@ -12,7 +12,7 @@
 ```
 src/
   engine/        Motor de juego puro (sin DOM): se prueba con node --test
-    board.js       Carriles, casillas, cruces
+    board.js       Rutas, casillas, rotondas (quién se cruza con quién)
     rules.js       Reglas provisorias y valores por defecto
     roster.js      Equipos y vehículos por defecto
     reducer.js     Estado = reducir(historial de acciones)
@@ -20,12 +20,13 @@ src/
     describe.js    Textos del historial en español
   content/deck.js  Cartas genéricas y carga de contenido real (JSON)
   scene/         Tablero 3D
-    layout.js      Recorrido, posición de cada casilla, tamaños
-    board.js       Mesa, tablero, carriles, cruces, Palacio, Obelisco, paisaje
+    layout.js      Geometría de las rutas trenzadas, casillas, centro de cada rotonda
+    printed.js     Tablero impreso (canvas): regiones, río, rutas, casillas, rotondas, relieve
+    board.js       Mesa, marco, Palacio, montañas, edificios, puentes, semáforos, árboles
     vehicles.js    Las 6 fichas
-    spinner.js     Ruleta
+    spinner.js     Ruleta sobre la colina central
     stage.js       Renderizador, luces, cámara, animaciones
-    textures.js    Texturas procedurales (madera, paño, etiquetas)
+    textures.js    Texturas procedurales (madera, ruleta, mazos, carteles)
     merge.js       Une geometría estática para reducir llamadas de dibujo
     palette.js     Colores UBA y de casillas
   ui/            Interfaz HTML sobre el tablero
@@ -78,6 +79,16 @@ flowchart LR
 
 Una acción que no corresponde a la fase actual se ignora y no se registra.
 
+### Rotondas
+
+`engine/board.js` arma las rutas como una trenza. Las 6 rutas tienen una "posición" de columna (0 a 5, de izquierda a derecha). En cada nivel de cruce (casillas 8, 18 y 27) las posiciones se agrupan (`LEVEL_GROUPS`: pares, tríos, pares) y cada grupo invierte su orden al pasar por la rotonda. Así cada ruta cruza a rivales distintos.
+
+- `CROSSINGS`: `{ id, level, index, lanes }` para las 8 rotondas.
+- `crossingAt(lane, pos)`: id de la rotonda o `null`. El choque se detecta comparando ids, no números de casilla: dos equipos en la casilla 8 de rutas distintas no chocan.
+- `pending.cruce` y el evento `collision` llevan el id de la rotonda (es el número impreso en el tablero).
+
+`scene/layout.js` convierte esa trenza en curvas: columnas fijas, diagonales hacia el centro de cada rotonda, curvas en S entre cruces (más amplias en las rutas cortas para igualar largos) y una deformación suave de todo el plano para que se vea orgánico. `tests/layout.test.mjs` verifica que las rutas solo se tocan en sus rotondas, que no pisan la ruleta y que no salen del tablero.
+
 ### Fases
 
 `spin` → (`card` | `collision`) → `spin` del siguiente equipo … → `finished`.
@@ -88,7 +99,7 @@ Cada acción produce una lista de eventos (`spin`, `move`, `land`, `shift`, `col
 
 ## Guardado
 
-- Clave `jurisprudencia-en-ruta.session.v1` en `localStorage`: `{ v, roster, rules, history, redo, settings, savedAt }`. Se escribe en cada acción.
+- Clave `jurisprudencia-en-ruta.session.v2` en `localStorage`: `{ v, roster, rules, history, redo, settings, savedAt }`. Se escribe en cada acción.
 - Clave `jurisprudencia-en-ruta.deck.v1`: contenido jurídico cargado.
 - En Chrome y Edge, `localStorage` de archivos `file://` se comparte entre archivos locales; en Safari depende de la ruta del archivo. Si se mueve la carpeta, se puede perder la partida guardada: para cambiar de computadora o carpeta, usar Exportar / Importar partida.
 - Si el almacenamiento está bloqueado (modo privado), el juego funciona igual pero sin guardado.
@@ -98,8 +109,9 @@ Si cambia el formato, subir `SESSION_VERSION` en `session.js`: las partidas viej
 ## Gráficos
 
 - Renderizado PBR con mapeo de tonos ACES, entorno `RoomEnvironment`, sombra suave de una luz principal, luz de relleno y foco cenital.
-- Materiales tipo plástico con barniz (clearcoat) para fichas y casillas.
-- La geometría estática se une por material (`merge.js`): unas 330 llamadas de dibujo por cuadro contando el pase de sombras (eran unas 750 sin unir).
+- El tablero es un solo plano con una textura dibujada en canvas en unidades del mundo (88 píxeles por unidad, unos 4096 × 3000; la mitad en calidad Baja), más un mapa de relieve (bump) con las rutas levantadas, las ranuras entre casillas, el pliegue central y el grano del papel. La capa de fondo (regiones, río, barrios, cartel) se dibuja una vez; rutas, rotondas y salidas se repintan cuando cambia el color de un equipo (con 120 ms de espera para no repintar en cada movimiento del selector).
+- Materiales tipo plástico con barniz (clearcoat) para fichas, montañas y edificios.
+- La geometría estática se une por material (`merge.js`): unas 170 llamadas de dibujo por cuadro contando el pase de sombras.
 - Calidad (Configuración > Presentación): **Alta** (resolución 2×, sombras 4096), **Media** (1,25×, 2048), **Baja** (1×, sin sombras, menos árboles). Además, si el equipo no sostiene unos 40 cuadros por segundo, la resolución baja sola una vez.
 
 ## Pruebas
@@ -108,7 +120,7 @@ Si cambia el formato, subir `SESSION_VERSION` en `session.js`: las partidas viej
 npm test
 ```
 
-Cubren: composición de carriles, paradas en cruces, choques y penalidades, cartas y efectos, ganador, repetición determinista, deshacer/rehacer/saltar/reiniciar, recarga desde el almacenamiento, exportar/importar e historial.
+Cubren: composición de rutas, paradas en cruces, choques por rotonda (incluida la de tres rutas), geometría del tablero, penalidades, cartas y efectos, ganador, repetición determinista, deshacer/rehacer/saltar/reiniciar, recarga desde el almacenamiento, exportar/importar e historial.
 
 Verificación manual antes de cada presentación: ver [MANTENIMIENTO.md](MANTENIMIENTO.md#checklist-antes-de-presentar).
 

@@ -67,10 +67,13 @@ Todas las rutas son relativas a `src/`. Después de cualquier cambio: `npm test`
 | --- | --- |
 | Valores por defecto de las reglas | `engine/rules.js` → `DEFAULT_RULES` |
 | Qué hace cada casilla | `engine/reducer.js` → `land()` |
-| Orden y cantidad de casillas, cruces, largo del carril | `engine/board.js` → `SEGMENTS`, `CRUCES`, `LANE_LENGTH` |
-| Equipos por defecto (nombre, color, carril) | `engine/roster.js` |
+| Orden y cantidad de casillas, cruces, largo de la ruta | `engine/board.js` → `SEGMENTS`, `CRUCES`, `LANE_LENGTH` |
+| Quién se cruza con quién en cada rotonda | `engine/board.js` → `LEVEL_GROUPS` (y la tabla de `docs/DESIGN.md`) |
+| Equipos por defecto (nombre, color, ruta) | `engine/roster.js` |
 | Colores de casillas e identidad | `scene/palette.js` y `styles.css` (`:root`) |
-| Forma del recorrido en el tablero | `scene/layout.js` → `PATH` |
+| Forma de las rutas (columnas, alturas de los cruces, curvas) | `scene/layout.js` → `COLS`, `Z_LEVELS`, `BUMP`, `warp()` |
+| Dibujo del tablero impreso (regiones, río, barrios, cartel) | `scene/printed.js` |
+| Montañas, edificios, árboles, semáforos | `scene/board.js` |
 | Vehículos | `scene/vehicles.js` → `BUILDERS` |
 | Textos de cartas genéricas | `content/deck.js` → `GENERIC` |
 | Atajos de teclado | `main.js` → `onKey()` |
@@ -79,7 +82,8 @@ Todas las rutas son relativas a `src/`. Después de cualquier cambio: `npm test`
 ### Reglas al cambiar el motor
 
 - El reductor debe seguir siendo puro: nada de `Math.random()` ni de fechas adentro. Lo aleatorio se decide antes y viaja en la acción (como `SPIN.value`).
-- Si cambiás `board.js` (casillas, cruces, largo), las partidas guardadas dejan de tener sentido: subí `SESSION_VERSION` en `engine/session.js`.
+- Si cambiás `board.js` (casillas, cruces, largo, rotondas), las partidas guardadas dejan de tener sentido: subí `SESSION_VERSION` en `engine/session.js`.
+- Si tocás la forma de las rutas en `layout.js`, corré `npm test`: `tests/layout.test.mjs` avisa si dos rutas se tocan fuera de una rotonda o si una ruta pisa la ruleta.
 - Agregar un tipo de casilla: estilo en `scene/palette.js`, efecto en `reducer.js`, texto en `ui/hud.js` → `effectText()`, nombre en `board.js` → `SQUARE_TYPES`.
 
 ## Recuperar una partida en vivo

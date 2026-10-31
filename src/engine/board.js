@@ -1,4 +1,6 @@
-// Logical board: 6 parallel lanes that share three intersections (cruces).
+// Logical board: one winding road per team. Roads physically cross each other
+// at intersections (cruces) on squares 8, 18 and 27. Each crossing is shared by
+// 2 or 3 specific teams; only teams sharing a crossing can collide there.
 // Index 0 is the start, LANE_LENGTH is the finish (meta).
 
 export const LANE_COUNT = 6;
@@ -17,6 +19,52 @@ export const SQUARE_TYPES = {
   cruce: { label: 'Cruce' },
   meta: { label: 'Meta' },
 };
+
+// The roads form a braid. Roads sit side by side in 6 "positions" (left to right);
+// at each crossing level, the roads in a group cross and swap order.
+// Level 2 uses three-way crossings (roundabouts) so every road crosses at every level.
+const LEVEL_GROUPS = [
+  [[0, 1], [2, 3], [4, 5]],
+  [[0, 1, 2], [3, 4, 5]],
+  [[0, 1], [2, 3], [4, 5]],
+];
+
+function buildCrossings() {
+  const crossings = [];
+  const lanePositions = Array.from({ length: LANE_COUNT }, (_, lane) => [lane]);
+  const crossingOf = Array.from({ length: LANE_COUNT }, () => []);
+  let order = Array.from({ length: LANE_COUNT }, (_, p) => p); // position -> lane
+  LEVEL_GROUPS.forEach((groups, level) => {
+    const next = [...order];
+    for (const group of groups) {
+      const id = crossings.length + 1;
+      const lanes = group.map((p) => order[p]);
+      crossings.push({ id, level, index: CRUCES[level], positions: group, lanes });
+      for (const lane of lanes) crossingOf[lane][level] = id;
+      group.forEach((p, i) => {
+        next[p] = order[group[group.length - 1 - i]];
+      });
+    }
+    order = next;
+    order.forEach((lane, p) => lanePositions[lane].push(p));
+  });
+  return { crossings, lanePositions, crossingOf };
+}
+
+const built = buildCrossings();
+
+export const CROSSINGS = built.crossings;
+// LANE_POSITIONS[lane] = position (0..5) before level 1, after level 1, 2 and 3.
+export const LANE_POSITIONS = built.lanePositions;
+
+export function crossingAt(lane, pos) {
+  const level = CRUCES.indexOf(pos);
+  return level < 0 ? null : built.crossingOf[lane][level];
+}
+
+export function crossingById(id) {
+  return CROSSINGS.find((c) => c.id === id) || null;
+}
 
 // Segments between cruces. Each lane rotates every segment by its lane index,
 // so all lanes have identical counts per type but different sequences.

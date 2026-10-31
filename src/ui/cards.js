@@ -1,4 +1,3 @@
-import { CRUCES } from '../engine/board.js';
 import { pickCard } from '../content/deck.js';
 import { SQUARE_STYLE } from '../scene/palette.js';
 import { el, esc } from './dom.js';
@@ -121,7 +120,7 @@ export class Cards {
       <div class="card" style="--type:#EF4230;--type-ink:#fff">
         <div class="card-head">
           <div class="card-glyph">!</div>
-          <div><div class="card-type">Cruce ${CRUCES.indexOf(cruce) + 1} · Carta conjunta</div><div class="card-title">${esc(card.titulo)}</div></div>
+          <div><div class="card-type">Cruce ${cruce} · Carta conjunta</div><div class="card-title">${esc(card.titulo)}</div></div>
         </div>
         <div class="card-body">
           <div class="versus">${vs}</div>

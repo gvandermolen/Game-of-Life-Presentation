@@ -2,7 +2,7 @@
 
 Juego de mesa 3D, estilo *Juego de la Vida*, para la presentación sobre jurisprudencia de transporte tradicional (colectivo, taxi, remis, auto particular, moto) y plataformas (Uber, Cabify). Facultad de Derecho, Universidad de Buenos Aires.
 
-Los expositores manejan el juego desde una sola computadora conectada al proyector. Cada grupo del aula es un medio de transporte; avanza por su carril, responde cartas según la casilla y, en los cruces, choca con otros equipos (accidentes de tránsito). Gana el primero que llega al Palacio de Justicia.
+Los expositores manejan el juego desde una sola computadora conectada al proyector. Cada grupo del aula es un medio de transporte; avanza por su propia ruta, responde cartas según la casilla y, en las 8 rotondas donde las rutas se cruzan, choca con otros transportes (accidentes de tránsito). Gana el primero que llega al Palacio de Justicia.
 
 ## Cómo jugar en la presentación
 

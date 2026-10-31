@@ -45,6 +45,26 @@ test('arriving on an occupied cruce triggers a collision', () => {
   assert.equal(after.teams[0].pos, CRUCES[0]);
   assert.equal(after.teams[1].pos, CRUCES[0] - 2);
   assert.equal(currentTeam(after).id, 'taxi');
+  assert.equal(s.pending.cruce, 1);
+});
+
+test('teams on the same square index but different crossings do not collide', () => {
+  const pair = defaultRoster().map((t) => ({ ...t, enabled: t.id === 'colectivo' || t.id === 'auto' }));
+  let s = createGame(pair);
+  s = landOn(s, 1, CRUCES[0]);
+  s = reduce(s, { type: 'SPIN', value: 10 });
+  assert.notEqual(s.phase, 'collision');
+});
+
+test('three roads meet at the middle roundabout', () => {
+  const trio = defaultRoster().map((t) => ({ ...t, enabled: ['colectivo', 'taxi', 'app'].includes(t.id) }));
+  let s = createGame(trio);
+  s = landOn(s, 1, CRUCES[1]);
+  s = landOn(s, 0, CRUCES[0]);
+  s = reduce(s, { type: 'SPIN', value: 10 });
+  assert.equal(s.phase, 'collision');
+  assert.deepEqual(s.pending.teams, ['colectivo', 'taxi']);
+  assert.equal(s.pending.cruce, 4);
 });
 
 test('collision with perderTurno makes the loser skip', () => {

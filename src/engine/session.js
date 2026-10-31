@@ -2,8 +2,8 @@ import { createGame, reduce, replay } from './reducer.js';
 import { defaultRoster } from './roster.js';
 import { DEFAULT_RULES } from './rules.js';
 
-export const SESSION_VERSION = 1;
-export const STORAGE_KEY = 'jurisprudencia-en-ruta.session.v1';
+export const SESSION_VERSION = 2;
+export const STORAGE_KEY = 'jurisprudencia-en-ruta.session.v2';
 
 export const DEFAULT_SETTINGS = {
   titulo: 'Jurisprudencia en Ruta',
@@ -12,7 +12,7 @@ export const DEFAULT_SETTINGS = {
   sonido: true,
   volumen: 0.7,
   velocidad: 1, // animation speed multiplier
-  leyenda: true,
+  leyenda: false,
 };
 
 export function newSessionData(roster = defaultRoster(), rules = DEFAULT_RULES, settings = DEFAULT_SETTINGS) {

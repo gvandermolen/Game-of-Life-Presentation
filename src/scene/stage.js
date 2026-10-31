@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
-import { LANE_LENGTH, isCruce } from '../engine/board.js';
-import { buildBoard, recolorLanes, ROAD_Y, TILE_H } from './board.js';
-import { BOARD, SPINNER_POS, bandFrame, laneSquare } from './layout.js';
+import { LANE_LENGTH, crossingAt } from '../engine/board.js';
+import { buildBoard, PIECE_Y } from './board.js';
+import { BOARD, SPINNER_POS, crossingCenter, laneSquare } from './layout.js';
 import { UBA } from './palette.js';
 import { Spinner } from './spinner.js';
 import { buildPiece, setPieceColor } from './vehicles.js';
@@ -13,11 +13,10 @@ const QUALITY = {
   bajo: { pixelRatio: 1, shadow: 1024, shadows: false },
 };
 
-const PIECE_Y = ROAD_Y + TILE_H;
 const VIEWS = {
-  overview: { pos: [-2.2, 43, 36], look: [-2.2, -1.5, 1.6] },
+  overview: { pos: [0, 44.5, 35.5], look: [0, -1.5, 2.6] },
   intro: { pos: [-34, 9, 40], look: [0, 0, 0] },
-  spinner: { pos: [SPINNER_POS.x, 11.5, SPINNER_POS.z + 10.5], look: [SPINNER_POS.x, 0.2, SPINNER_POS.z - 0.6] },
+  spinner: { pos: [SPINNER_POS.x, 10, SPINNER_POS.z + 9], look: [SPINNER_POS.x, 0.4, SPINNER_POS.z - 0.4] },
 };
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
@@ -89,9 +88,9 @@ export class Stage {
     this.wantLook = new THREE.Vector3(...VIEWS.overview.look);
     this.camRate = 1.1;
 
-    const { group, laneMaterials } = buildBoard(roster, this.q === QUALITY.bajo ? 'bajo' : 'alto');
+    const { group, printed } = buildBoard(roster, this.q === QUALITY.bajo ? 'bajo' : 'alto');
     scene.add(group);
-    this.laneMaterials = laneMaterials;
+    this.printed = printed;
 
     this.spinner = new Spinner(10);
     this.spinner.group.position.copy(SPINNER_POS);
@@ -132,8 +131,10 @@ export class Stage {
     }
   }
 
+  // Repainting the printed board is costly, so colour-picker drags are debounced.
   recolor(roster) {
-    recolorLanes(this.laneMaterials, roster);
+    clearTimeout(this.repaintTimer);
+    this.repaintTimer = setTimeout(() => this.printed.paint(roster), 120);
     for (const t of roster) {
       const piece = this.pieces.get(t.id);
       if (piece) setPieceColor(piece, t.color);
@@ -155,18 +156,19 @@ export class Stage {
   }
 
   placementAt(state, team, pos) {
-    if (pos > 0 && pos < LANE_LENGTH && isCruce(pos)) {
-      const here = state.teams.filter((t) => t.pos === pos && !t.finished);
+    const id = pos > 0 && pos < LANE_LENGTH ? crossingAt(team.lane, pos) : null;
+    const sq = laneSquare(team.lane, pos);
+    if (id) {
+      const here = state.teams.filter((t) => !t.finished && crossingAt(t.lane, t.pos) === id);
       if (here.length > 1 && here.includes(team)) {
-        const { pos: c, heading } = bandFrame(pos);
+        const c = crossingCenter(id);
         const i = here.indexOf(team);
-        const a = heading + (i / here.length) * Math.PI * 2 + Math.PI / 4;
-        const p = new THREE.Vector3(c.x + Math.cos(a) * 0.78, PIECE_Y, c.z - Math.sin(a) * 0.78);
+        const a = sq.heading + (i / here.length) * Math.PI * 2 + Math.PI / 4;
+        const p = new THREE.Vector3(c.x + Math.cos(a) * 0.72, PIECE_Y, c.z - Math.sin(a) * 0.72);
         return { pos: p, heading: a + Math.PI + 0.5 };
       }
     }
-    const sq = laneSquare(team.lane, pos);
-    return { pos: new THREE.Vector3(sq.pos.x, PIECE_Y + (pos === 0 || pos === LANE_LENGTH || isCruce(pos) ? 0.04 : 0), sq.pos.z), heading: sq.heading };
+    return { pos: new THREE.Vector3(sq.pos.x, PIECE_Y, sq.pos.z), heading: sq.heading };
   }
 
   snap(state) {
@@ -233,8 +235,8 @@ export class Stage {
     this.followId = null;
     const x = THREE.MathUtils.clamp(p.x, -BOARD.width / 2 + 5, BOARD.width / 2 - 5);
     const z = THREE.MathUtils.clamp(p.z, -BOARD.depth / 2 + 3, BOARD.depth / 2 - 2);
-    this.wantLook.set(x, 0, z + 5.5);
-    this.wantPos.set(x * 0.8, 21, z + 5.5 + 16);
+    this.wantLook.set(x, 0, z + 7.5);
+    this.wantPos.set(x * 0.92, 19, z + 7.5 + 13);
     this.camRate = 1.6;
   }
 
@@ -312,7 +314,7 @@ export class Stage {
   }
 
   async crash(cruce, teamIds) {
-    const { pos } = bandFrame(cruce);
+    const pos = crossingCenter(cruce);
     this.focusPoint(pos, { dist: 9, height: 8.5, rate: 3.2 });
     await this.wait(0.45);
     this.shake = 1;
