@@ -8,11 +8,15 @@ import { UBA } from './palette.js';
 import { Post } from './post.js';
 import { Spinner } from './spinner.js';
 import { buildPiece, setPieceColor } from './vehicles.js';
+import { GpuTimer } from './gpu-timer.js';
+
+// About 45 fps of headroom; the CPU side of a frame is only a few milliseconds.
+const GPU_BUDGET_MS = 22;
 
 const QUALITY = {
-  // Above 1.5 the cost grows with the square of the ratio while SMAA already hides the edges.
-  alto: { pixelRatio: 1.5, shadow: 4096, shadows: true, post: { ao: true, aoSamples: 12, tiltShift: true } },
-  medio: { pixelRatio: 1, shadow: 2048, shadows: true, post: { ao: true, aoSamples: 8, tiltShift: true } },
+  // Below the screen's native ratio the board is upscaled and looks out of focus on Retina.
+  alto: { pixelRatio: 2, shadow: 4096, shadows: true, post: { ao: true, aoSamples: 12 } },
+  medio: { pixelRatio: 1.5, shadow: 2048, shadows: true, post: { ao: true, aoSamples: 8 } },
   bajo: { pixelRatio: 1, shadow: 1024, shadows: false, post: null },
 };
 
@@ -50,6 +54,7 @@ export class Stage {
     r.shadowMap.type = THREE.PCFSoftShadowMap;
     this.container.appendChild(r.domElement);
     this.renderer = r;
+    this.gpu = GpuTimer.create(r);
 
     const scene = new THREE.Scene();
     scene.background = new THREE.Color('#1a120c');
@@ -366,8 +371,9 @@ export class Stage {
     piece.userData.lift.rotation.y = 0;
   }
 
-  // While the machine cannot keep ~45 fps, give up resolution first, then the
-  // effects, one step every two seconds.
+  // While a frame costs too much, give up ambient occlusion first, then resolution,
+  // one step every two seconds. GPU time is preferred over frame rate because the
+  // browser caps frame rate in background tabs and embedded views regardless of load.
   adapt(dt) {
     // The first frames compile shaders and would read as a slow machine.
     if (this.adapted || this.time < 1.5) return;
@@ -377,15 +383,19 @@ export class Stage {
     const fps = this.frames / this.frameTime;
     this.frames = 0;
     this.frameTime = 0;
-    if (fps >= 45) {
+    const gpu = this.gpu?.median();
+    if (gpu == null && (this.gpu || document.hidden)) return;
+    if (gpu != null ? gpu <= GPU_BUDGET_MS : fps >= 45) {
       this.adapted = true;
       return;
     }
+    // Effects go before resolution: a blurry board hurts more than missing shadows in corners.
+    if (this.post?.degrade()) return;
     const pr = this.renderer.getPixelRatio();
     if (pr > 1) {
       this.renderer.setPixelRatio(Math.max(1, pr - 0.25));
       this.resize();
-    } else if (!this.post?.degrade()) {
+    } else {
       this.adapted = true;
     }
   }
@@ -407,8 +417,10 @@ export class Stage {
       if (!this.tasks.size) this.fast = false;
       this.updateCamera(dt);
       this.updateMarkers();
+      const timing = !this.adapted && this.gpu?.begin();
       if (this.post) this.post.render();
       else this.renderer.render(this.scene, this.camera);
+      if (timing) this.gpu.end();
     };
     tick();
   }
