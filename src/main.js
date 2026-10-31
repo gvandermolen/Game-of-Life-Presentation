@@ -35,7 +35,7 @@ class App {
   }
 
   async init() {
-    await Promise.all(['400', '700', '900'].map((w) => document.fonts.load(`${w} 32px Bitter`))).catch(() => {});
+    await Promise.all(['400', '700', '900', 'italic 400', 'italic 700'].map((w) => document.fonts.load(`${w} 32px Bitter`))).catch(() => {});
     const settings = this.session.data.settings;
     this.sound.set({ enabled: settings.sonido, volume: settings.volumen });
 
@@ -172,7 +172,6 @@ class App {
     for (const ev of events) {
       switch (ev.type) {
         case 'spin': {
-          st.view('spinner', 2.2);
           this.sound.whoosh();
           await st.wait(0.35);
           await st.spin(ev.value);
@@ -182,8 +181,7 @@ class App {
           break;
         }
         case 'move': {
-          st.follow(ev.team);
-          await st.wait(0.25);
+          await st.wait(0.15);
           await st.walk(ev.team, ev.path, next, () => this.sound.hop());
           this.hud.renderTeams(next, this.session.data.roster);
           break;
@@ -201,7 +199,6 @@ class App {
           const back = ev.to < ev.from;
           const why = ev.reason === 'multa' ? 'Multa' : ev.reason === 'colision' ? 'Choque' : back ? 'Retrocede' : 'Avanza';
           this.hud.toast(`${why}: ${this.name(ev.team)} ${back ? 'retrocede' : 'avanza'} ${Math.abs(ev.to - ev.from)}`, back ? 'var(--coral)' : 'var(--green)');
-          st.follow(ev.team);
           await st.slide(ev.team, next);
           break;
         }

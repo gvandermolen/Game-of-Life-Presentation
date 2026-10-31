@@ -36,7 +36,7 @@ Criterios de éxito:
 Todos los valores se cambian en Configuración > Reglas, y el cambio queda en el historial.
 
 - Cada turno, el equipo gira la ruleta (1 a 10) y avanza por su ruta.
-- **Cruce** (casillas 8, 18 y 27 de cada ruta): parada obligatoria en una rotonda compartida con otras rutas. Si al llegar ya hay otro equipo en esa rotonda, hay **choque**: carta conjunta y los expositores eligen quién prevalece. Quien no prevalece retrocede 2 casillas (o pierde un turno, o ambas cosas). "Sin responsable" no penaliza a nadie.
+- **Cruce** (casillas 8, 17 y 25 de cada ruta): parada obligatoria en una rotonda compartida con otras rutas. Si al llegar ya hay otro equipo en esa rotonda, hay **choque**: carta conjunta y los expositores eligen quién prevalece. Quien no prevalece retrocede 2 casillas (o pierde un turno, o ambas cosas). "Sin responsable" no penaliza a nadie.
 
 ### Rotondas: quién se cruza con quién
 
@@ -85,10 +85,23 @@ Cada ruta tiene exactamente las mismas cantidades de cada tipo, en distinto orde
 ## Tablero
 
 - Mesa de madera barnizada, tablero con marco azul UBA y filete dorado.
-- Tablero "impreso" como el cartón del juego de 1960: parches de colores (mostaza, naranja, verdes), rayado litográfico, grano de papel, pliegue central y viñeta envejecida. Barrios porteños impresos (Palermo, Recoleta, La Boca…) y el Riachuelo cruzando al frente, con puentes de baranda blanca.
-- Seis rutas de asfalto con borde del color del equipo que salen de un círculo "SALIDA" con el nombre del transporte, serpentean y se cruzan en 8 rotondas numeradas (asfalto, sendas peatonales en cada entrada, arcos con los colores de los equipos que se encuentran, semáforo). Las casillas están impresas sobre la ruta con relieve.
-- La Meta es una banda dorada a cuadros a lo ancho del fondo; detrás, el Palacio de Justicia sobre una plaza.
-- Relieve en plástico como el original: montañas verdes brillantes, edificios, iglesias y casas blancas junto a las rutas, árboles, Obelisco. La ruleta está sobre una colina verde en el centro.
+- Fondo "impreso" como el cartón del juego de 1960: parches de colores suaves (mostaza, naranja, verdes), grano de papel, pliegue central y viñeta envejecida. El Riachuelo cruza al frente con su nombre siguiendo la curva del río; cada ruta lo cruza por un puente de baranda blanca que acompaña la curva de la ruta.
+- Seis rutas de asfalto con borde del color del equipo que salen de un círculo "SALIDA" con el nombre del transporte, serpentean con curvas redondeadas y se cruzan en 8 rotondas numeradas. Cada rotonda es como una real: calzada circular, cordón cortado en cada entrada, senda peatonal en cada acceso, isla central azul con el número y semáforos detrás (para no tapar el número). Las casillas son piezas en relieve que se curvan con la ruta.
+- La Meta es una avenida dorada a cuadros, apenas curva, a lo ancho del fondo. Cada ruta llega derecha y perpendicular a la avenida, como una calle que desemboca en ella, con su propia línea de llegada a cuadros; el texto "META · PALACIO DE JUSTICIA" sigue la curva de la avenida. Detrás, el Palacio de Justicia sobre una plaza.
+- Relieve en plástico como el original: casas, iglesias y torres blancas junto a las rutas y árboles. Sin montañas: la ruleta está sobre un pedestal bajo.
+- Cada barrio tiene su monumento, ubicado más o menos donde queda en un mapa real (norte hacia el Palacio, el Riachuelo al frente, el río hacia la derecha), con el nombre del barrio y del monumento al lado:
+
+  | Barrio | Monumento |
+  | --- | --- |
+  | San Nicolás | Obelisco |
+  | Monserrat | Casa Rosada |
+  | Balvanera | Congreso |
+  | La Boca | La Bombonera y Caminito |
+  | Puerto Madero | Puente de la Mujer |
+  | Recoleta | Floralis Genérica |
+  | Palermo | Planetario |
+  | Retiro | Torre Monumental |
+  | Núñez | Estadio Monumental |
 - Fuera del tablero, sobre la mesa: mazos de Preguntas, Dilemas, Apelaciones y Accidentes.
 - Fichas: cada transporte es un vehículo de juguete brillante sobre una base redonda del color del equipo. El taxi es negro con techo amarillo, como en Buenos Aires.
 
@@ -123,7 +136,7 @@ Prohibido por diseño: degradados violeta, glassmorphism, tarjetas genéricas, e
 
 ## Movimiento y cámara
 
-- La cámara arranca con un barrido sobre la mesa, se acerca a la ruleta al girar, sigue a la ficha mientras avanza y vuelve a la vista general al terminar el turno.
+- La cámara arranca con un barrido sobre la mesa y después queda quieta en la vista general: la ruleta gira y las fichas avanzan sin mover la cámara. Solo se mueve para encuadrar una carta, un choque, o si los expositores eligen seguir a un equipo (teclas 1 a 6).
 - Con una carta abierta, la cámara deja la ficha en el tercio superior para que no quede tapada.
 - La ruleta desacelera con una curva suave y hace "clic" en cada segmento. Siempre se detiene en el número que registró el motor.
 - Las fichas avanzan casilla por casilla con un salto corto.

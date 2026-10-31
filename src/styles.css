@@ -1,6 +1,7 @@
 @font-face { font-family: Bitter; font-weight: 400; font-style: normal; src: url(__FONT_400__) format('woff2'); }
 @font-face { font-family: Bitter; font-weight: 400; font-style: italic; src: url(__FONT_400I__) format('woff2'); }
 @font-face { font-family: Bitter; font-weight: 700; font-style: normal; src: url(__FONT_700__) format('woff2'); }
+@font-face { font-family: Bitter; font-weight: 700; font-style: italic; src: url(__FONT_700I__) format('woff2'); }
 @font-face { font-family: Bitter; font-weight: 900; font-style: normal; src: url(__FONT_900__) format('woff2'); }
 
 :root {

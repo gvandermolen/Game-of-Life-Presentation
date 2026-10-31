@@ -1,11 +1,11 @@
 // Logical board: one winding road per team. Roads physically cross each other
-// at intersections (cruces) on squares 8, 18 and 27. Each crossing is shared by
+// at intersections (cruces) on squares 8, 17 and 25. Each crossing is shared by
 // 2 or 3 specific teams; only teams sharing a crossing can collide there.
 // Index 0 is the start, LANE_LENGTH is the finish (meta).
 
 export const LANE_COUNT = 6;
 export const LANE_LENGTH = 32;
-export const CRUCES = [8, 18, 27];
+export const CRUCES = [8, 17, 25];
 
 export const SQUARE_TYPES = {
   salida: { label: 'Salida' },
@@ -70,9 +70,9 @@ export function crossingById(id) {
 // so all lanes have identical counts per type but different sequences.
 const SEGMENTS = [
   { from: 1, types: ['libre', 'pregunta', 'libre', 'multa', 'dilema', 'libre', 'bonus'] },
-  { from: 9, types: ['pregunta', 'control', 'libre', 'dilema', 'libre', 'apelacion', 'pregunta', 'multa', 'libre'] },
-  { from: 19, types: ['dilema', 'bonus', 'pregunta', 'libre', 'control', 'apelacion', 'libre', 'pregunta'] },
-  { from: 28, types: ['multa', 'dilema', 'libre', 'apelacion'] },
+  { from: 9, types: ['pregunta', 'control', 'libre', 'dilema', 'libre', 'apelacion', 'pregunta', 'multa'] },
+  { from: 18, types: ['dilema', 'bonus', 'pregunta', 'libre', 'control', 'apelacion', 'pregunta'] },
+  { from: 26, types: ['libre', 'multa', 'dilema', 'libre', 'apelacion', 'libre'] },
 ];
 
 function buildLane(lane) {

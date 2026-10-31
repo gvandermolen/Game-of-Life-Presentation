@@ -21,10 +21,14 @@ src/
   content/deck.js  Cartas genéricas y carga de contenido real (JSON)
   scene/         Tablero 3D
     layout.js      Geometría de las rutas trenzadas, casillas, centro de cada rotonda
-    printed.js     Tablero impreso (canvas): regiones, río, rutas, casillas, rotondas, relieve
-    board.js       Mesa, marco, Palacio, montañas, edificios, puentes, semáforos, árboles
+    roads.js       Rutas, casillas, rotondas, salidas, avenida Meta, río y puentes (geometría)
+    landmarks.js   Monumentos de cada barrio y sus nombres
+    text3d.js      Letras nítidas: atlas de glifos Bitter, texto a lo largo de una curva
+    space.js       Río, cartel, plaza y la prueba "¿hay lugar libre acá?"
+    printed.js     Fondo impreso (canvas): regiones, plaza, viñeta, pliegue, borde
+    board.js       Mesa, marco, Palacio, edificios, semáforos, árboles, mazos
     vehicles.js    Las 6 fichas
-    spinner.js     Ruleta sobre la colina central
+    spinner.js     Ruleta sobre un pedestal bajo
     stage.js       Renderizador, luces, cámara, animaciones
     textures.js    Texturas procedurales (madera, ruleta, mazos, carteles)
     merge.js       Une geometría estática para reducir llamadas de dibujo
@@ -81,13 +85,20 @@ Una acción que no corresponde a la fase actual se ignora y no se registra.
 
 ### Rotondas
 
-`engine/board.js` arma las rutas como una trenza. Las 6 rutas tienen una "posición" de columna (0 a 5, de izquierda a derecha). En cada nivel de cruce (casillas 8, 18 y 27) las posiciones se agrupan (`LEVEL_GROUPS`: pares, tríos, pares) y cada grupo invierte su orden al pasar por la rotonda. Así cada ruta cruza a rivales distintos.
+`engine/board.js` arma las rutas como una trenza. Las 6 rutas tienen una "posición" de columna (0 a 5, de izquierda a derecha). En cada nivel de cruce (casillas 8, 17 y 25) las posiciones se agrupan (`LEVEL_GROUPS`: pares, tríos, pares) y cada grupo invierte su orden al pasar por la rotonda. Así cada ruta cruza a rivales distintos.
 
 - `CROSSINGS`: `{ id, level, index, lanes }` para las 8 rotondas.
 - `crossingAt(lane, pos)`: id de la rotonda o `null`. El choque se detecta comparando ids, no números de casilla: dos equipos en la casilla 8 de rutas distintas no chocan.
 - `pending.cruce` y el evento `collision` llevan el id de la rotonda (es el número impreso en el tablero).
 
-`scene/layout.js` convierte esa trenza en curvas: columnas fijas, diagonales hacia el centro de cada rotonda, curvas en S entre cruces (más amplias en las rutas cortas para igualar largos) y una deformación suave de todo el plano para que se vea orgánico. `tests/layout.test.mjs` verifica que las rutas solo se tocan en sus rotondas, que no pisan la ruleta y que no salen del tablero.
+`scene/layout.js` convierte esa trenza en curvas:
+
+- Cada ruta tiene su columna entre rotondas. Un tramo que necesita más largo para sus casillas serpentea alrededor de su columna (`m` zigzags de ancho `a`).
+- `designAll()` elige, tramo por tramo, el serpenteo con las curvas más abiertas que deja al menos `MIN_SPACING` entre casillas sin acercarse a rutas ya trazadas, a otras rotondas, a las salidas, a la ruleta ni al borde. En cada franja eligen primero las rutas que más largo necesitan.
+- `filletPath()` reemplaza cada esquina por un arco de radio hasta `FILLET_RADIUS`. Junto a cada ancla (salida, rotonda, meta) queda un tramo recto: las rutas entran a las rotondas en línea radial y llegan a la Meta perpendiculares.
+- `warp()` deforma el plano muy suavemente (una deformación fuerte aplastaría las curvas) y cerca de la Meta inclina las rutas para que lleguen perpendiculares a la avenida curva.
+
+`tests/layout.test.mjs` verifica que las rutas solo se tocan en sus rotondas, que no pisan la ruleta, que no salen del tablero y que ninguna casilla cae en una rotonda, una salida o la Meta.
 
 ### Fases
 
@@ -99,7 +110,7 @@ Cada acción produce una lista de eventos (`spin`, `move`, `land`, `shift`, `col
 
 ## Guardado
 
-- Clave `jurisprudencia-en-ruta.session.v2` en `localStorage`: `{ v, roster, rules, history, redo, settings, savedAt }`. Se escribe en cada acción.
+- Clave `jurisprudencia-en-ruta.session.v3` en `localStorage`: `{ v, roster, rules, history, redo, settings, savedAt }`. Se escribe en cada acción.
 - Clave `jurisprudencia-en-ruta.deck.v1`: contenido jurídico cargado.
 - En Chrome y Edge, `localStorage` de archivos `file://` se comparte entre archivos locales; en Safari depende de la ruta del archivo. Si se mueve la carpeta, se puede perder la partida guardada: para cambiar de computadora o carpeta, usar Exportar / Importar partida.
 - Si el almacenamiento está bloqueado (modo privado), el juego funciona igual pero sin guardado.
@@ -109,8 +120,10 @@ Si cambia el formato, subir `SESSION_VERSION` en `session.js`: las partidas viej
 ## Gráficos
 
 - Renderizado PBR con mapeo de tonos ACES, entorno `RoomEnvironment`, sombra suave de una luz principal, luz de relleno y foco cenital.
-- El tablero es un solo plano con una textura dibujada en canvas en unidades del mundo (88 píxeles por unidad, unos 4096 × 3000; la mitad en calidad Baja), más un mapa de relieve (bump) con las rutas levantadas, las ranuras entre casillas, el pliegue central y el grano del papel. La capa de fondo (regiones, río, barrios, cartel) se dibuja una vez; rutas, rotondas y salidas se repintan cuando cambia el color de un equipo (con 120 ms de espera para no repintar en cada movimiento del selector).
-- Materiales tipo plástico con barniz (clearcoat) para fichas, montañas y edificios.
+- Todo lo que tiene que verse nítido de cerca es geometría, no textura: rutas (cintas a lo largo de la curva), casillas (bloques curvos), rotondas, salidas, avenida Meta, río y puentes (`roads.js`). Los textos del tablero se arman con un atlas de glifos y siguen cualquier curva (`text3d.js`), así "RIACHUELO" sigue al río y "META · PALACIO DE JUSTICIA" a la avenida.
+- Debajo queda un solo plano con el fondo impreso (`printed.js`, 40 píxeles por unidad): regiones de color difuminadas, plaza, viñeta, pliegue y borde. Nada ahí necesita bordes duros, por eso no se pixela. El grano del papel es una textura chica repetida como relieve.
+- Al cambiar el color de un equipo solo cambia el color del material de su borde de ruta y se rehacen los nombres de las salidas (con 120 ms de espera para no rehacerlos en cada movimiento del selector).
+- Materiales tipo plástico con barniz (clearcoat) para fichas, casillas, monumentos y edificios.
 - La geometría estática se une por material (`merge.js`): unas 170 llamadas de dibujo por cuadro contando el pase de sombras.
 - Calidad (Configuración > Presentación): **Alta** (resolución 2×, sombras 4096), **Media** (1,25×, 2048), **Baja** (1×, sin sombras, menos árboles). Además, si el equipo no sostiene unos 40 cuadros por segundo, la resolución baja sola una vez.
 

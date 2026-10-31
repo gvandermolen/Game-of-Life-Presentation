@@ -43,7 +43,7 @@ export function mergeStatic(root) {
   // Drop groups left empty by the merge.
   const empty = [];
   root.traverse((o) => {
-    if (o !== root && o.type === 'Group' && o.children.length === 0) empty.push(o);
+    if (o !== root && o.type === 'Group' && o.children.length === 0 && !o.userData.dynamic) empty.push(o);
   });
   empty.forEach((o) => o.parent?.remove(o));
   return root;

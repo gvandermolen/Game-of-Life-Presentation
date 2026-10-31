@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { CROSSINGS, LANE_COUNT } from '../engine/board.js';
-import { BOARD, COURTHOUSE_POS, ROAD_WIDTH, crossingCenter, crossingRadius, distanceToRoads, laneFrame } from './layout.js';
+import { CROSSINGS } from '../engine/board.js';
+import { BOARD, COURTHOUSE_POS, ROAD_WIDTH, crossingCenter, crossingRadius, distanceToRoads } from './layout.js';
+import { buildLandmarks } from './landmarks.js';
 import { mergeStatic } from './merge.js';
 import { UBA } from './palette.js';
-import { PrintedBoard, RIVER, RIVER_WIDTH, isFree, riverDistance } from './printed.js';
-import { deckTexture, makeNoise, signTexture, woodTexture } from './textures.js';
-
-const PIECE_Y = 0.02;
+import { PrintedBoard } from './printed.js';
+import { PIECE_Y, buildRoadNetwork } from './roads.js';
+import { isFree } from './space.js';
+import { deckTexture, signTexture, woodTexture } from './textures.js';
 
 function plastic(color, extra = {}) {
   return new THREE.MeshPhysicalMaterial({
@@ -65,57 +66,15 @@ function buildBoardBody(group, printed) {
   const mat = new THREE.MeshPhysicalMaterial({
     map: printed.map,
     bumpMap: printed.bump,
-    bumpScale: 2.2,
-    roughness: 0.62,
+    bumpScale: 0.6,
+    roughness: 0.66,
     clearcoat: 0.28,
     clearcoatRoughness: 0.42,
   });
   const top = new THREE.Mesh(geo, mat);
   top.position.y = 0.005;
   top.receiveShadow = true;
-  top.userData.dynamic = true;
   group.add(top);
-}
-
-// Lumpy glossy plastic mountain, like the green hills of the original board.
-function mountainGeometry(radius, height, seed) {
-  const geo = new THREE.SphereGeometry(1, 64, 32);
-  const n = makeNoise(seed);
-  const p = geo.attributes.position;
-  const v = new THREE.Vector3();
-  for (let i = 0; i < p.count; i++) {
-    v.fromBufferAttribute(p, i);
-    const bump = 0.78 + n(v.x * 1.8 + 5, v.z * 1.8 + v.y * 1.3 + 5) * 0.45;
-    const y = Math.max(0, v.y);
-    p.setXYZ(i, v.x * radius * bump, Math.pow(y, 0.85) * height * (0.85 + bump * 0.2), v.z * radius * bump);
-  }
-  geo.computeVertexNormals();
-  return geo;
-}
-
-function buildMountains(group, rnd, spots) {
-  const greens = ['#4E9A3E', '#5FAE48', '#3F8A3A'].map((c) => plastic(c, { roughness: 0.3, clearcoat: 0.8 }));
-  const snow = plastic('#F5F2EA', { roughness: 0.3 });
-  let placed = 0;
-  for (let tries = 0; tries < 4000 && placed < 7; tries++) {
-    const r = 1.3 + rnd() * 1.0;
-    const x = (rnd() - 0.5) * BOARD.width;
-    const z = (rnd() - 0.5) * BOARD.depth;
-    if (!isFree(x, z, r, { road: 0.45 })) continue;
-    if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + r + 0.4)) continue;
-    const h = 0.9 + rnd() * 1.1;
-    const m = shadowed(new THREE.Mesh(mountainGeometry(r, h, 11 + placed), greens[placed % greens.length]));
-    m.position.set(x, 0, z);
-    m.rotation.y = rnd() * Math.PI;
-    group.add(m);
-    if (h > 1.5) {
-      const cap = shadowed(new THREE.Mesh(mountainGeometry(r * 0.32, h * 0.25, 40 + placed), snow));
-      cap.position.set(x, h * 0.86, z);
-      group.add(cap);
-    }
-    spots.push({ x, z, r });
-    placed++;
-  }
 }
 
 // White plastic buildings, like the 3D pieces of the vintage board.
@@ -224,39 +183,6 @@ function buildTrees(group, rnd, spots, quality) {
   }
 }
 
-function buildBridges(group) {
-  const rail = plastic('#F4F1EA', { roughness: 0.35 });
-  const post = plastic('#E2DCCD', { roughness: 0.4 });
-  for (let lane = 0; lane < LANE_COUNT; lane++) {
-    let best = 0;
-    let bestD = Infinity;
-    for (let i = 0; i < 600; i++) {
-      const p = laneFrame(lane, i / 599).p;
-      const d = riverDistance(p.x, p.z);
-      if (d < bestD) {
-        bestD = d;
-        best = i / 599;
-      }
-    }
-    if (bestD > 0.3) continue;
-    const { p, tangent, normal } = laneFrame(lane, best);
-    const len = RIVER_WIDTH + 0.9;
-    for (const s of [-1, 1]) {
-      const c = p.clone().addScaledVector(normal, s * (ROAD_WIDTH / 2 + 0.12));
-      const bar = shadowed(new THREE.Mesh(new RoundedBoxGeometry(len, 0.08, 0.1, 1, 0.03), rail));
-      bar.position.set(c.x, 0.22, c.z);
-      bar.rotation.y = Math.atan2(-tangent.z, tangent.x);
-      group.add(bar);
-      for (const e of [-0.5, 0, 0.5]) {
-        const q = c.clone().addScaledVector(tangent, e * len);
-        const pp = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.22, 0.1), post));
-        pp.position.set(q.x, 0.11, q.z);
-        group.add(pp);
-      }
-    }
-  }
-}
-
 function buildTrafficLight(group, at, facing) {
   const g = new THREE.Group();
   const dark = new THREE.MeshStandardMaterial({ color: '#23262e', roughness: 0.45 });
@@ -291,7 +217,8 @@ function buildCrossingProps(group, spots) {
       const z = center.z + Math.sin(a) * R;
       cands.push({ a, x, z, d: distanceToRoads(x, z) });
     }
-    cands.sort((p, q) => q.d - p.d);
+    // Behind the roundabout (away from the audience) so poles never hide its number.
+    cands.sort((p, q) => (p.z > center.z - 0.4) - (q.z > center.z - 0.4) || q.d - p.d);
     const chosen = [];
     for (const p of cands) {
       if (p.d < ROAD_WIDTH / 2 + 0.25) break;
@@ -385,32 +312,6 @@ function buildFlag(group, at) {
   group.add(flag);
 }
 
-function buildObelisco(group, spots, rnd) {
-  for (let tries = 0; tries < 3000; tries++) {
-    const x = (rnd() - 0.5) * BOARD.width;
-    const z = (rnd() - 0.5) * BOARD.depth * 0.6;
-    if (!isFree(x, z, 1.2, { road: 0.4 })) continue;
-    if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 1.4)) continue;
-    const g = new THREE.Group();
-    const white = plastic('#F6F3EC', { roughness: 0.3 });
-    const plaza = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(1.05, 1.12, 0.1, 40), plastic('#E3D8C0', { roughness: 0.6, clearcoat: 0.2 })));
-    plaza.position.y = 0.05;
-    g.add(plaza);
-    const shaft = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.3, 3.9, 4, 1), white));
-    shaft.rotation.y = Math.PI / 4;
-    shaft.position.y = 0.1 + 1.95;
-    g.add(shaft);
-    const tip = shadowed(new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.38, 4), white));
-    tip.rotation.y = Math.PI / 4;
-    tip.position.y = 0.1 + 3.9 + 0.19;
-    g.add(tip);
-    g.position.set(x, 0, z);
-    group.add(g);
-    spots.push({ x, z, r: 1.2 });
-    return;
-  }
-}
-
 function buildDecks(group) {
   const decks = [
     { word: 'Preguntas', color: UBA.sky },
@@ -440,21 +341,21 @@ function buildDecks(group) {
 
 export function buildBoard(roster, quality) {
   const group = new THREE.Group();
-  const printed = new PrintedBoard(roster, quality);
+  const printed = new PrintedBoard(quality);
   buildTable(group, quality);
   buildBoardBody(group, printed);
+  const roads = buildRoadNetwork(roster);
+  group.add(roads.group);
   buildCourthouse(group);
-  buildBridges(group);
   const spots = [];
   const rnd = seeded(11);
   buildCrossingProps(group, spots);
-  buildMountains(group, rnd, spots);
-  buildObelisco(group, spots, rnd);
+  buildLandmarks(group, spots);
   buildTown(group, rnd, spots);
   buildTrees(group, rnd, spots, quality);
   buildDecks(group);
   mergeStatic(group);
-  return { group, printed };
+  return { group, roads };
 }
 
-export { PIECE_Y, RIVER };
+export { PIECE_Y };

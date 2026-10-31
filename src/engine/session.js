@@ -2,8 +2,8 @@ import { createGame, reduce, replay } from './reducer.js';
 import { defaultRoster } from './roster.js';
 import { DEFAULT_RULES } from './rules.js';
 
-export const SESSION_VERSION = 2;
-export const STORAGE_KEY = 'jurisprudencia-en-ruta.session.v2';
+export const SESSION_VERSION = 3;
+export const STORAGE_KEY = 'jurisprudencia-en-ruta.session.v3';
 
 export const DEFAULT_SETTINGS = {
   titulo: 'Jurisprudencia en Ruta',

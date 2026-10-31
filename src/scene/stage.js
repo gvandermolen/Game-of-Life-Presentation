@@ -88,9 +88,9 @@ export class Stage {
     this.wantLook = new THREE.Vector3(...VIEWS.overview.look);
     this.camRate = 1.1;
 
-    const { group, printed } = buildBoard(roster, this.q === QUALITY.bajo ? 'bajo' : 'alto');
+    const { group, roads } = buildBoard(roster, this.q === QUALITY.bajo ? 'bajo' : 'alto');
     scene.add(group);
-    this.printed = printed;
+    this.roads = roads;
 
     this.spinner = new Spinner(10);
     this.spinner.group.position.copy(SPINNER_POS);
@@ -131,10 +131,10 @@ export class Stage {
     }
   }
 
-  // Repainting the printed board is costly, so colour-picker drags are debounced.
+  // Start names are rebuilt as text meshes, so colour-picker drags are debounced.
   recolor(roster) {
     clearTimeout(this.repaintTimer);
-    this.repaintTimer = setTimeout(() => this.printed.paint(roster), 120);
+    this.repaintTimer = setTimeout(() => this.roads.recolor(roster), 120);
     for (const t of roster) {
       const piece = this.pieces.get(t.id);
       if (piece) setPieceColor(piece, t.color);

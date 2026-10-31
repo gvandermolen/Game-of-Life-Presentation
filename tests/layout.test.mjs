@@ -1,8 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { CROSSINGS, LANE_COUNT, LANE_LENGTH, crossingAt } from '../src/engine/board.js';
-import { BOARD, LANE_GEO, ROAD_WIDTH, SPINNER_CLEARANCE, SPINNER_POS, crossingCenter, laneSquare } from '../src/scene/layout.js';
+import { CROSSINGS, CRUCES, LANE_COUNT, LANE_LENGTH, crossingAt } from '../src/engine/board.js';
+import { BOARD, LANE_GEO, ROAD_WIDTH, SPINNER_CLEARANCE, SPINNER_POS, START_RADIUS, crossingCenter, crossingRadius, laneSquare, squareLength } from '../src/scene/layout.js';
 
 const samples = (lane, n = 500) => Array.from({ length: n }, (_, i) => LANE_GEO[lane].curve.getPointAt(i / (n - 1)));
 
@@ -18,15 +18,15 @@ test('crossing squares sit exactly where the roads cross', () => {
 
 test('roads only touch at their shared crossings', () => {
   const S = Array.from({ length: LANE_COUNT }, (_, l) => samples(l));
-  const centers = CROSSINGS.map((c) => ({ c: crossingCenter(c.id), lanes: c.lanes }));
+  const centers = CROSSINGS.map((c) => ({ c: crossingCenter(c.id), lanes: c.lanes, r: crossingRadius(c.id) + 1.2 }));
   const minGap = ROAD_WIDTH + 0.15;
   for (let a = 0; a < LANE_COUNT; a++) {
     for (let b = a + 1; b < LANE_COUNT; b++) {
-      const shared = centers.filter((x) => x.lanes.includes(a) && x.lanes.includes(b)).map((x) => x.c);
+      const shared = centers.filter((x) => x.lanes.includes(a) && x.lanes.includes(b));
       for (const p of S[a]) {
-        if (shared.some((c) => c.distanceTo(p) < 2.6)) continue;
+        if (shared.some((x) => x.c.distanceTo(p) < x.r)) continue;
         for (const q of S[b]) {
-          if (shared.some((c) => c.distanceTo(q) < 2.6)) continue;
+          if (shared.some((x) => x.c.distanceTo(q) < x.r)) continue;
           const d = p.distanceTo(q);
           assert.ok(d > minGap, `lanes ${a} and ${b} touch outside a crossing at (${p.x.toFixed(1)}, ${p.z.toFixed(1)}) d=${d.toFixed(2)}`);
         }
@@ -37,7 +37,7 @@ test('roads only touch at their shared crossings', () => {
 
 test('each lane crosses other roads three times, every crossing has 2 or 3 roads', () => {
   for (let lane = 0; lane < LANE_COUNT; lane++) {
-    const ids = [8, 18, 27].map((k) => crossingAt(lane, k));
+    const ids = CRUCES.map((k) => crossingAt(lane, k));
     assert.equal(new Set(ids).size, 3);
   }
   for (const c of CROSSINGS) assert.ok(c.lanes.length >= 2 && c.lanes.length <= 3);
@@ -59,7 +59,26 @@ test('squares are evenly usable (not crammed)', () => {
     for (let k = 1; k <= LANE_LENGTH; k++) {
       const a = laneSquare(lane, k - 1).pos;
       const b = laneSquare(lane, k).pos;
-      assert.ok(a.distanceTo(b) > 0.6, `lane ${lane} squares ${k - 1}-${k} too close: ${a.distanceTo(b).toFixed(2)}`);
+      assert.ok(a.distanceTo(b) > 0.7, `lane ${lane} squares ${k - 1}-${k} too close: ${a.distanceTo(b).toFixed(2)}`);
+    }
+  }
+});
+
+test('ordinary squares stay clear of roundabouts, start circles and the meta', () => {
+  for (let lane = 0; lane < LANE_COUNT; lane++) {
+    for (let k = 1; k < LANE_LENGTH; k++) {
+      if (crossingAt(lane, k)) continue;
+      const p = laneSquare(lane, k).pos;
+      const half = squareLength(lane, k) / 2;
+      for (const c of CROSSINGS) {
+        const d = p.distanceTo(crossingCenter(c.id));
+        assert.ok(d - half > crossingRadius(c.id) + 0.3, `lane ${lane} square ${k} inside roundabout ${c.id}`);
+      }
+      for (let other = 0; other < LANE_COUNT; other++) {
+        assert.ok(p.distanceTo(laneSquare(other, 0).pos) - half > START_RADIUS, `lane ${lane} square ${k} on a start circle`);
+      }
+      const { arcs, length } = LANE_GEO[lane];
+      assert.ok(length - arcs[k] - half > 1.0, `lane ${lane} square ${k} on the meta`);
     }
   }
 });

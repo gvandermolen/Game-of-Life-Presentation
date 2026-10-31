@@ -17,31 +17,30 @@ export class Spinner {
     const gold = new THREE.MeshStandardMaterial({ color: UBA.gold, metalness: 0.75, roughness: 0.25 });
     const white = new THREE.MeshPhysicalMaterial({ color: '#f7f5ef', roughness: 0.3, clearcoat: 0.8 });
 
-    // Green plastic hill the spinner sits on, like the classic board.
-    const hillProfile = [];
-    for (let i = 0; i <= 16; i++) {
-      const t = i / 16;
-      hillProfile.push(new THREE.Vector2(RADIUS + 0.75 - t * 0.55, Math.sin((t * Math.PI) / 2) * 0.42));
-    }
-    hillProfile.push(new THREE.Vector2(0, 0.42));
-    const hill = new THREE.Mesh(
-      new THREE.LatheGeometry(hillProfile, 96),
-      new THREE.MeshPhysicalMaterial({ color: '#4F9A3F', roughness: 0.38, clearcoat: 0.7, clearcoatRoughness: 0.25 }),
+    // Low pedestal: lifts the wheel just enough to read as a separate piece.
+    const plinth = new THREE.Mesh(
+      new THREE.CylinderGeometry(RADIUS + 0.6, RADIUS + 0.68, 0.2, 96),
+      new THREE.MeshPhysicalMaterial({ color: '#EFE7D6', roughness: 0.45, clearcoat: 0.5 }),
     );
-    hill.castShadow = hill.receiveShadow = true;
-    this.group.add(hill);
+    plinth.position.y = 0.1;
+    plinth.castShadow = plinth.receiveShadow = true;
+    this.group.add(plinth);
+    const lip = new THREE.Mesh(new THREE.TorusGeometry(RADIUS + 0.6, 0.035, 10, 120), gold);
+    lip.rotation.x = Math.PI / 2;
+    lip.position.y = 0.2;
+    this.group.add(lip);
 
     const base = new THREE.Mesh(new THREE.CylinderGeometry(RADIUS + 0.2, RADIUS + 0.28, 0.2, 72), navy);
-    base.position.y = 0.5;
+    base.position.y = 0.3;
     base.castShadow = base.receiveShadow = true;
     this.group.add(base);
     const ring = new THREE.Mesh(new THREE.TorusGeometry(RADIUS + 0.22, 0.05, 12, 96), gold);
     ring.rotation.x = Math.PI / 2;
-    ring.position.y = 0.6;
+    ring.position.y = 0.4;
     this.group.add(ring);
 
     this.wheel = new THREE.Group();
-    this.wheel.position.y = 0.72;
+    this.wheel.position.y = 0.52;
     const rim = new THREE.Mesh(new THREE.CylinderGeometry(RADIUS, RADIUS, 0.2, 96), white);
     rim.castShadow = rim.receiveShadow = true;
     this.wheel.add(rim);
@@ -84,7 +83,7 @@ export class Spinner {
     arrow.position.set(0, 0.98, -0.1);
     arrow.castShadow = true;
     pointer.add(arrow);
-    pointer.position.set(0, 0.4, -RADIUS - 0.25);
+    pointer.position.set(0, 0.2, -RADIUS - 0.25);
     this.pointer = pointer;
     this.group.add(pointer);
 

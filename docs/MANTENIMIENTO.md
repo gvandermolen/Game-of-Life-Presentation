@@ -71,8 +71,10 @@ Todas las rutas son relativas a `src/`. Después de cualquier cambio: `npm test`
 | Quién se cruza con quién en cada rotonda | `engine/board.js` → `LEVEL_GROUPS` (y la tabla de `docs/DESIGN.md`) |
 | Equipos por defecto (nombre, color, ruta) | `engine/roster.js` |
 | Colores de casillas e identidad | `scene/palette.js` y `styles.css` (`:root`) |
-| Forma de las rutas (columnas, alturas de los cruces, curvas) | `scene/layout.js` → `COLS`, `Z_LEVELS`, `BUMP`, `warp()` |
-| Dibujo del tablero impreso (regiones, río, barrios, cartel) | `scene/printed.js` |
+| Forma de las rutas (columnas, alturas de los cruces, curvas) | `scene/layout.js` → `COLS`, `Z_LEVELS`, `MIN_SPACING`, `MAX_ZIG`, `FILLET_RADIUS`, `warp()` |
+| Rutas, casillas, rotondas, Meta, río, puentes, cartel | `scene/roads.js` |
+| Monumentos y nombres de barrios | `scene/landmarks.js` → `LANDMARKS` (barrio, monumento, posición aproximada) |
+| Fondo impreso (regiones de color, plaza, viñeta) | `scene/printed.js` |
 | Montañas, edificios, árboles, semáforos | `scene/board.js` |
 | Vehículos | `scene/vehicles.js` → `BUILDERS` |
 | Textos de cartas genéricas | `content/deck.js` → `GENERIC` |

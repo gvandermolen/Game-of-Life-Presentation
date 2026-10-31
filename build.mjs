@@ -16,6 +16,7 @@ const FONTS = {
   __FONT_400__: 'bitter-latin-400-normal.woff2',
   __FONT_400I__: 'bitter-latin-400-italic.woff2',
   __FONT_700__: 'bitter-latin-700-normal.woff2',
+  __FONT_700I__: 'bitter-latin-700-italic.woff2',
   __FONT_900__: 'bitter-latin-900-normal.woff2',
 };
 
