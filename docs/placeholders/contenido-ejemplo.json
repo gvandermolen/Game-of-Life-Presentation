@@ -1,0 +1,41 @@
+{
+  "nombre": "EJEMPLO FICTICIO - no usar en la presentación",
+  "cartas": [
+    {
+      "id": "p-01",
+      "tipo": "pregunta",
+      "titulo": "Obligación de seguridad",
+      "caso": "Caso ficticio 1 · Pasajera c/ Empresa La Ribera",
+      "texto": "Una pasajera cae dentro del colectivo por una frenada brusca. ¿Qué tipo de responsabilidad tiene la empresa?",
+      "opciones": ["Subjetiva: hay que probar culpa del chofer", "Objetiva: obligación de seguridad del transportista", "Ninguna: el riesgo lo asume el pasajero", "Solo responde el chofer"],
+      "correcta": 1,
+      "transportes": ["colectivo", "remis"]
+    },
+    {
+      "id": "d-01",
+      "tipo": "dilema",
+      "titulo": "¿Intermediaria o transportista?",
+      "caso": "Caso ficticio 2 · Taxistas c/ Plataforma Viajes Ya",
+      "texto": "La aplicación dice que solo conecta usuarios. ¿Presta el servicio de transporte?",
+      "opciones": ["Sí, es transportista", "No, es intermediaria tecnológica"],
+      "transportes": ["taxi", "app"]
+    },
+    {
+      "id": "a-01",
+      "tipo": "apelacion",
+      "titulo": "Exclusión de cobertura",
+      "caso": "Caso ficticio 3 · Rodríguez c/ Gómez",
+      "texto": "La aseguradora apela: la póliza particular excluye el uso comercial. ¿Es oponible a la víctima?",
+      "opciones": ["Confirma: no es oponible", "Revoca: es oponible"],
+      "correcta": 0,
+      "transportes": ["app", "moto", "auto"]
+    },
+    {
+      "id": "c-01",
+      "tipo": "colision",
+      "titulo": "Choque en esquina sin semáforo",
+      "caso": "Caso ficticio 3 · Rodríguez c/ Gómez",
+      "texto": "Dos vehículos chocan en el cruce. Cada equipo argumenta quién tenía prioridad de paso y quién responde por el riesgo de la cosa."
+    }
+  ]
+}
