@@ -342,6 +342,66 @@ function buildLane(lane) {
 
 export const LANE_GEO = Array.from({ length: LANE_COUNT }, (_, lane) => buildLane(lane));
 
+// Where two lanes enter a roundabout at a narrow angle their first squares can
+// meet. Those lanes start their squares further out from that roundabout and the
+// rest of the stretch closes up to make room.
+const EXTRA_GAP = new Map();
+const TILE_HALF = ROAD_WIDTH / 2 - 0.09;
+
+function squareRange(lane, k) {
+  const L = Math.max(0.7, Math.min(1.15, LANE_GEO[lane].spacing[k] - 0.14));
+  return [LANE_GEO[lane].arcs[k] - L / 2, L];
+}
+
+const ANCHORS = [0, ...CRUCES, LANE_LENGTH];
+
+function respace(lane, A, B) {
+  const geo = LANE_GEO[lane];
+  const s0 = geo.arcs[A] + anchorGap(lane, A) + (EXTRA_GAP.get(`${lane}:${A}`) || 0);
+  const s1 = geo.arcs[B] - anchorGap(lane, B) - (EXTRA_GAP.get(`${lane}:${B}`) || 0);
+  const m = B - A - 1;
+  const step = m > 1 ? (s1 - s0) / (m - 1) : Infinity;
+  for (let q = 0; q < m; q++) {
+    const k = A + 1 + q;
+    geo.arcs[k] = m > 1 ? s0 + step * q : (s0 + s1) / 2;
+    geo.spacing[k] = m > 1 ? step : s1 - s0;
+    geo.stations[k] = geo.arcs[k] / geo.length;
+  }
+}
+
+function squarePoints(lane, k, across) {
+  const [s0, L] = squareRange(lane, k);
+  const pts = [];
+  for (let i = 0; i <= 8; i++) {
+    const { p, normal } = laneAt(lane, s0 + (L * i) / 8);
+    for (const side of across) pts.push({ x: p.x + normal.x * side * TILE_HALF, z: p.z + normal.z * side * TILE_HALF });
+  }
+  return pts;
+}
+
+// Pairs of squares on different lanes, or non-adjacent on one lane, that overlap.
+export function squareClashes() {
+  const all = [];
+  for (let lane = 0; lane < LANE_COUNT; lane++) {
+    for (let k = 1; k < LANE_LENGTH; k++) {
+      if (!crossingAt(lane, k)) {
+        const line = squarePoints(lane, k, [0]);
+        all.push({ lane, k, pts: squarePoints(lane, k, [-1, -0.5, 0, 0.5, 1]), line, c: line[4] });
+      }
+    }
+  }
+  const out = [];
+  for (const a of all) {
+    for (const b of all) {
+      if (a === b || (a.lane === b.lane && Math.abs(a.k - b.k) <= 1)) continue;
+      // Squares are at most 1.15 long and 1.12 wide, so farther centres cannot touch.
+      if (Math.hypot(a.c.x - b.c.x, a.c.z - b.c.z) > 2.4) continue;
+      if (a.pts.some((p) => b.line.some((q) => Math.hypot(q.x - p.x, q.z - p.z) < TILE_HALF - 0.05))) out.push({ a, b });
+    }
+  }
+  return out;
+}
+
 const _t = new THREE.Vector3();
 
 export function laneFrame(lane, u) {
@@ -367,7 +427,7 @@ export function laneSquare(lane, k) {
 
 // Length of a square along its road.
 export function squareLength(lane, k) {
-  return Math.max(0.7, Math.min(1.15, LANE_GEO[lane].spacing[k] - 0.14));
+  return squareRange(lane, k)[1];
 }
 
 // Point and frame at an arc length along a lane.
@@ -427,4 +487,20 @@ export function metaDistance(x, z) {
     if (d < best) best = d;
   }
   return Math.sqrt(best);
+}
+
+for (let pass = 0; pass < 40; pass++) {
+  const clashes = squareClashes();
+  if (!clashes.length) break;
+  const hit = new Map();
+  for (const { a, b } of clashes) for (const q of [a, b]) hit.set(`${q.lane}:${q.k}`, q);
+  for (const { lane, k } of hit.values()) {
+    const anchor = crossingAt(lane, k + 1) ? k + 1 : crossingAt(lane, k - 1) ? k - 1 : null;
+    if (anchor == null) continue;
+    const key = `${lane}:${anchor}`;
+    EXTRA_GAP.set(key, (EXTRA_GAP.get(key) || 0) + 0.05);
+    const i = ANCHORS.indexOf(anchor);
+    respace(lane, ANCHORS[i - 1], anchor);
+    respace(lane, anchor, ANCHORS[i + 1]);
+  }
 }

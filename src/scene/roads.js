@@ -274,6 +274,9 @@ function tileGeometry(lane, s, L, halfW) {
 
 function buildSquares(group, M) {
   for (let lane = 0; lane < LANE_COUNT; lane++) {
+    // Neighbouring lanes' squares overlap slightly where they enter a roundabout
+    // side by side; at equal heights the two surfaces flicker against each other.
+    const lift = lane * 0.004;
     for (let k = 1; k < LANE_LENGTH; k++) {
       if (crossingAt(lane, k)) continue;
       const type = LANES[lane][k];
@@ -281,6 +284,7 @@ function buildSquares(group, M) {
       const L = squareLength(lane, k);
       const halfW = ROAD_WIDTH / 2 - 0.09;
       const tile = new THREE.Mesh(tileGeometry(lane, s, L, halfW), M.tiles[type]);
+      tile.position.y = lift;
       tile.castShadow = true;
       tile.receiveShadow = true;
       group.add(tile);
@@ -292,7 +296,7 @@ function buildSquares(group, M) {
         const g = new THREE.PlaneGeometry(size, size);
         g.rotateX(-Math.PI / 2);
         g.rotateY(yaw);
-        g.translate(pos.x, Y.label, pos.z);
+        g.translate(pos.x, Y.label + lift, pos.z);
         group.add(flat(g, tileLabel(type)));
       }
       const off = new THREE.Vector3(-size * 0.42, 0, -size * 0.42).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw);
@@ -302,7 +306,7 @@ function buildSquares(group, M) {
           weight: 700,
           color: type === 'multa' ? '#FFFFFF' : '#3A4170',
           rot: -yaw,
-          y: Y.label + 0.001,
+          y: Y.label + lift + 0.001,
         }),
       );
     }
@@ -403,12 +407,17 @@ function buildRoundabouts(group, M) {
     group.add(textAt(String(c.id), centre.x, centre.z + 0.06, { size: 0.5, weight: 900, color: UBA.gold, y: Y.disc + 0.092 }));
     group.add(textAt('CRUCE', centre.x, centre.z - 0.26, { size: 0.12, weight: 900, color: '#FFFFFF', y: Y.disc + 0.092, spacing: 0.01 }));
 
-    // Zebra crossings on every entry, stripes parallel to the traffic.
+    // Zebra crossings on every entry, stripes parallel to the traffic. Where two
+    // lanes enter side by side their crossings would land on each other: keep one.
+    const zebras = [];
     for (const lane of c.lanes) {
       const s = LANE_GEO[lane].arcs[c.index];
       for (const dir of [-1, 1]) {
         const a = s + dir * (R + 0.1);
         const b = s + dir * (R + 0.42);
+        const mid = laneAt(lane, (a + b) / 2).p;
+        if (zebras.some((z) => z.distanceTo(mid) < ROAD_WIDTH)) continue;
+        zebras.push(mid);
         const frames = laneFrames(lane, Math.min(a, b), Math.max(a, b), 0.05);
         const bars = 5;
         const span = ROAD_WIDTH - 0.3;

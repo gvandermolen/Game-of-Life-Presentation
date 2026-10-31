@@ -91,7 +91,7 @@ export class Stage {
     spot.target.position.set(0, 0, 0);
     scene.add(spot, spot.target);
 
-    this.camera = new THREE.PerspectiveCamera(34, this.container.clientWidth / this.container.clientHeight, 0.5, 300);
+    this.camera = new THREE.PerspectiveCamera(34, this.container.clientWidth / this.container.clientHeight, 2, 300);
     this.camPos = new THREE.Vector3(...VIEWS.intro.pos);
     this.camLook = new THREE.Vector3(...VIEWS.intro.look);
     this.camera.position.copy(this.camPos);
@@ -439,12 +439,9 @@ export class Stage {
     const k = damp(this.camRate, dt);
     this.camPos.lerp(this.wantPos, k);
     this.camLook.lerp(this.wantLook, k);
-    const drift = 0.25;
-    this.camera.position.set(
-      this.camPos.x + Math.sin(this.time * 0.21) * drift,
-      this.camPos.y + Math.sin(this.time * 0.17) * drift * 0.5,
-      this.camPos.z,
-    );
+    // No idle sway: thin board lines crawl across pixels whenever the camera moves,
+    // and without temporal antialiasing that reads as flicker.
+    this.camera.position.copy(this.camPos);
     if (this.shake > 0.001) {
       this.camera.position.x += (Math.random() - 0.5) * this.shake * 0.5;
       this.camera.position.y += (Math.random() - 0.5) * this.shake * 0.5;
