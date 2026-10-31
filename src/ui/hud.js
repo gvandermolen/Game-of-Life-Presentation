@@ -3,6 +3,9 @@ import { SQUARE_STYLE } from '../scene/palette.js';
 import { $, el, esc } from './dom.js';
 import { icon, vehicleSVG } from './icons.js';
 
+// A roundabout, for the one square type without a glyph of its own.
+const RING = '<svg viewBox="0 0 16 16" width="0.9em" height="0.9em" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
+
 const LEGEND_TYPES = ['pregunta', 'dilema', 'apelacion', 'multa', 'bonus', 'control', 'cruce'];
 
 function signed(n) {
@@ -41,7 +44,7 @@ export class Hud {
       <header class="topbar">
         <div class="brand">
           <div class="brand-mark">FD</div>
-          <div><div class="brand-eyebrow" data-k="sub"></div><div class="brand-title" data-k="title"></div></div>
+          <div><div class="brand-title" data-k="title"></div><div class="brand-sub" data-k="sub"></div></div>
         </div>
         <div class="turn hidden" data-k="turn"></div>
         <div class="tools">
@@ -89,8 +92,8 @@ export class Hud {
       `<h4>Casillas</h4>` +
       LEGEND_TYPES.map((t) => {
         const st = SQUARE_STYLE[t];
-        const glyph = st.glyph === 'stop' ? '■' : st.glyph || '✕';
-        return `<div class="legend-row"><span class="legend-sw" style="background:${st.color};color:${st.ink}">${esc(glyph)}</span><span class="legend-name">${esc(st.word || t)}<span class="legend-fx">${esc(effectText(t, state.rules))}</span></span></div>`;
+        const glyph = st.glyph === 'stop' ? '■' : st.glyph ? esc(st.glyph) : RING;
+        return `<div class="legend-row"><span class="legend-sw" style="background:${st.color};color:${st.ink}">${glyph}</span><span class="legend-name">${esc(st.word || t)}<span class="legend-fx">${esc(effectText(t, state.rules))}</span></span></div>`;
       }).join('');
   }
 

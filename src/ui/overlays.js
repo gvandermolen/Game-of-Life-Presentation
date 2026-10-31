@@ -38,8 +38,8 @@ export class Winner {
       })
       .join('');
     this.inner.innerHTML = `
-      <div class="winner-eyebrow">Sentencia firme · Llegó a la Meta</div>
       <div class="winner-name">¡Ganó ${esc(w.nombre)}!</div>
+      <div class="winner-sub">Sentencia firme: llegó primero a la Meta.</div>
       <div class="winner-plate" style="--team:${w.color}">${vehicleSVG(w.id, w.color)}<b>Equipo ${esc(w.nombre)}</b></div>
       <div class="ranking">${ranking}</div>
       <div class="winner-actions">
@@ -121,10 +121,8 @@ export class Splash {
       .map((t, i) => `<div class="splash-team" style="--team:${t.color};animation-delay:${0.3 + i * 0.08}s">${vehicleSVG(t.id, t.color)}</div>`)
       .join('');
     const inProgress = st.moves > 0 && st.phase !== 'finished';
-    const [first, ...rest] = settings.titulo.split(' ');
     this.node.querySelector('.splash-inner').innerHTML = `
-      <div class="splash-eyebrow">Facultad de Derecho · Universidad de Buenos Aires</div>
-      <div class="splash-title">${esc(first)} <em>${esc(rest.join(' '))}</em></div>
+      <h1 class="splash-title">${esc(settings.titulo)}</h1>
       <div class="splash-sub">${esc(settings.subtitulo)}</div>
       <div class="splash-teams">${teams}</div>
       <div class="splash-actions">

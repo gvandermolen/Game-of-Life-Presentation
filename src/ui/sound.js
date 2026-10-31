@@ -7,7 +7,7 @@ export class Sound {
     this.volume = 0.7;
   }
 
-  unlock() {
+  wake() {
     if (!this.ctx) {
       const AC = window.AudioContext || window.webkitAudioContext;
       if (!AC) return;

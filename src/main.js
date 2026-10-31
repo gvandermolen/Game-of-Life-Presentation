@@ -55,7 +55,7 @@ class App {
     this.stage.view('intro', 0.4);
 
     window.addEventListener('keydown', (e) => this.onKey(e));
-    document.addEventListener('pointerdown', () => this.sound.unlock(), { once: false });
+    document.addEventListener('pointerdown', () => this.sound.wake(), { once: false });
   }
 
   name(id) {
@@ -67,7 +67,7 @@ class App {
   }
 
   start({ restart = false } = {}) {
-    this.sound.unlock();
+    this.sound.wake();
     if (restart) this.session.restart();
     this.started = true;
     this.splash.hide();
@@ -259,7 +259,7 @@ class App {
         this.updateSettings({ leyenda: !this.session.data.settings.leyenda });
         break;
       case 'sound':
-        this.sound.unlock();
+        this.sound.wake();
         this.updateSettings({ sonido: !this.session.data.settings.sonido });
         break;
       case 'full':
@@ -288,7 +288,7 @@ class App {
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
-    this.sound.unlock();
+    this.sound.wake();
     const k = e.key;
 
     if (k === 'Escape') {
