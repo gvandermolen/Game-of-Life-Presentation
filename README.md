@@ -6,6 +6,10 @@ Es un guion, no un juego de azar: cuatro autos (cuatro grupos del aula) recorren
 
 ## Cómo jugar en la presentación
 
+**Online:** [gvandermolen.github.io/Game-of-Life-Presentation](https://gvandermolen.github.io/Game-of-Life-Presentation/). Se actualiza solo con cada cambio en `main`.
+
+**Sin internet:**
+
 1. Copiá la carpeta `jugar/` a la computadora (Mac o Windows). No hace falta instalar nada ni tener internet.
 2. Doble clic en `jugar/JUGAR.html`. Se abre en el navegador (Chrome, Edge o Safari actualizados).
 3. `F` para pantalla completa. Si se comparte por Zoom, compartir la ventana del navegador.
