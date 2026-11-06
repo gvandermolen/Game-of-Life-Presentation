@@ -1,14 +1,13 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { CROSSINGS } from '../engine/board.js';
-import { BOARD, COURTHOUSE_POS, ROAD_WIDTH, crossingCenter, crossingRadius, distanceToRoads } from './layout.js';
+import { BOARD, DESTINO_POS, ROAD_WIDTH, distanceToRoads } from './layout.js';
 import { buildLandmarks, hidesLabel } from './landmarks.js';
 import { mergeStatic } from './merge.js';
 import { UBA } from './palette.js';
 import { PrintedBoard } from './printed.js';
-import { PIECE_Y, buildRoadNetwork } from './roads.js';
-import { isFree } from './space.js';
-import { deckTexture, signTexture, woodTexture } from './textures.js';
+import { FACULTAD, isFree } from './space.js';
+import { PIECE_Y, buildTrack } from './track.js';
+import { signTexture, woodTexture } from './textures.js';
 
 function plastic(color, extra = {}) {
   return new THREE.MeshPhysicalMaterial({
@@ -209,57 +208,8 @@ function buildTrees(group, rnd, spots, quality) {
   }
 }
 
-function buildTrafficLight(group, at, facing) {
-  const g = new THREE.Group();
-  const dark = new THREE.MeshStandardMaterial({ color: '#23262e', roughness: 0.45 });
-  const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.5, 10), dark));
-  pole.position.y = 0.75;
-  g.add(pole);
-  const box = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.3, 0.72, 0.26, 2, 0.06), dark));
-  box.position.y = 1.65;
-  g.add(box);
-  ['#ff3b2f', '#ffb300', '#2fd25a'].forEach((c, i) => {
-    const lamp = new THREE.Mesh(
-      new THREE.SphereGeometry(0.075, 14, 10),
-      new THREE.MeshStandardMaterial({ color: c, emissive: c, emissiveIntensity: i === 0 ? 1.8 : 0.2 }),
-    );
-    lamp.position.set(0, 1.88 - i * 0.22, 0.13);
-    g.add(lamp);
-  });
-  g.position.copy(at);
-  g.rotation.y = facing;
-  group.add(g);
-}
-
-function buildCrossingProps(group, spots) {
-  for (const c of CROSSINGS) {
-    const center = crossingCenter(c.id);
-    const R = crossingRadius(c.id) + 0.55;
-    // Best two free angles around the plaza.
-    const cands = [];
-    for (let i = 0; i < 48; i++) {
-      const a = (i / 48) * Math.PI * 2;
-      const x = center.x + Math.cos(a) * R;
-      const z = center.z + Math.sin(a) * R;
-      cands.push({ a, x, z, d: distanceToRoads(x, z) });
-    }
-    // Behind the roundabout (away from the audience) so poles never hide its number.
-    cands.sort((p, q) => (p.z > center.z - 0.4) - (q.z > center.z - 0.4) || q.d - p.d);
-    const chosen = [];
-    for (const p of cands) {
-      if (p.d < ROAD_WIDTH / 2 + 0.25) break;
-      if (chosen.some((q) => Math.abs(Math.atan2(Math.sin(p.a - q.a), Math.cos(p.a - q.a))) < 1.6)) continue;
-      chosen.push(p);
-      if (chosen.length === 2) break;
-    }
-    for (const p of chosen) {
-      buildTrafficLight(group, new THREE.Vector3(p.x, 0, p.z), Math.atan2(center.x - p.x, center.z - p.z));
-      spots.push({ x: p.x, z: p.z, r: 0.3 });
-    }
-  }
-}
-
-function buildCourthouse(group) {
+// The Facultad de Derecho: the colonnade and dome the class just walked out of.
+function buildFacultad(group) {
   const g = new THREE.Group();
   const stone = plastic('#F3EEE3', { roughness: 0.4, clearcoat: 0.45 });
   const stoneDark = plastic('#DCD3C0', { roughness: 0.5, clearcoat: 0.3 });
@@ -323,7 +273,7 @@ function buildCourthouse(group) {
   drumBand.position.set(1.6, 3.85, 0);
   g.add(drumBand);
 
-  const plaque = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.34), new THREE.MeshStandardMaterial({ map: signTexture('PALACIO DE JUSTICIA', { size: 46, h: 96, w: 768 }) }));
+  const plaque = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 0.34), new THREE.MeshStandardMaterial({ map: signTexture('FACULTAD DE DERECHO', { size: 46, h: 96, w: 768 }) }));
   plaque.position.set(-0.46, 2.82, 0);
   plaque.rotation.y = -Math.PI / 2;
   g.add(plaque);
@@ -331,7 +281,39 @@ function buildCourthouse(group) {
   buildFlag(g, new THREE.Vector3(1.6, 4.6, 0));
 
   g.scale.setScalar(0.62);
-  g.position.copy(COURTHOUSE_POS);
+  g.position.set(FACULTAD.x, 0, FACULTAD.z);
+  g.rotation.y = Math.PI / 2;
+  group.add(g);
+}
+
+// Home: where every car ends up. The front door faces the arriving road.
+function buildCasa(group) {
+  const white = plastic('#FBF3E4', { roughness: 0.3, clearcoat: 0.7 });
+  const roof = plastic('#C9503A');
+  const g = house(white, roof, 1.25, 1.1, 0.8);
+  const chimney = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.16, 0.4, 0.16, 2, 0.03), plastic('#B65A3A')));
+  chimney.position.set(0.3, 1.25, -0.2);
+  g.add(chimney);
+  const lawn = new THREE.Mesh(new RoundedBoxGeometry(2.2, 0.05, 2.0, 2, 0.02), plastic('#6FB84E', { roughness: 0.5, clearcoat: 0.2 }));
+  lawn.position.y = 0.025;
+  lawn.receiveShadow = true;
+  g.add(lawn);
+  const picket = plastic('#FFFFFF', { roughness: 0.35 });
+  for (let i = 0; i < 9; i++) {
+    for (const s of [-1, 1]) {
+      const p = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.06, 0.22, 0.04, 1, 0.015), picket));
+      p.position.set(-1.0 + i * 0.25, 0.14, s * 0.95);
+      g.add(p);
+    }
+  }
+  const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.3), new THREE.MeshStandardMaterial({ map: signTexture('CASA', { w: 384, h: 128, size: 80 }) }));
+  sign.position.set(0, 0.42, 1.0);
+  g.add(sign);
+  const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.3, 8), picket));
+  post.position.set(0, 0.15, 0.98);
+  g.add(post);
+  g.scale.setScalar(1.45);
+  g.position.set(DESTINO_POS.x - 0.4, 0, DESTINO_POS.z);
   g.rotation.y = Math.PI / 2;
   group.add(g);
 }
@@ -362,50 +344,22 @@ function buildFlag(group, at) {
   group.add(flag);
 }
 
-function buildDecks(group) {
-  const decks = [
-    { word: 'Preguntas', color: UBA.sky },
-    { word: 'Dilemas', color: UBA.teal },
-    { word: 'Apelaciones', color: UBA.gold },
-    { word: 'Accidentes', color: UBA.coral },
-  ];
-  const cardMat = new THREE.MeshStandardMaterial({ color: '#f5efe2', roughness: 0.7 });
-  decks.forEach((d, i) => {
-    const g = new THREE.Group();
-    const n = 9;
-    for (let j = 0; j < n; j++) {
-      const card = shadowed(new THREE.Mesh(new RoundedBoxGeometry(2.6, 0.05, 1.85, 1, 0.02), cardMat));
-      card.position.y = 0.03 + j * 0.055;
-      card.rotation.y = Math.sin(i * 7 + j * 3) * 0.04;
-      g.add(card);
-    }
-    const top = new THREE.Mesh(new THREE.PlaneGeometry(2.58, 1.83), new THREE.MeshStandardMaterial({ map: deckTexture(d.word, d.color), roughness: 0.5 }));
-    top.rotation.x = -Math.PI / 2;
-    top.position.y = 0.03 + n * 0.055 + 0.001;
-    g.add(top);
-    g.position.set(BOARD.width / 2 + 3.4, -BOARD.height, -9 + i * 4.6);
-    g.rotation.y = -0.08 + i * 0.05;
-    group.add(g);
-  });
-}
-
-export function buildBoard(roster, quality) {
+export function buildBoard(quality) {
   const group = new THREE.Group();
   const printed = new PrintedBoard(quality);
   buildTable(group, quality);
   buildBoardBody(group, printed);
-  const roads = buildRoadNetwork(roster);
-  group.add(roads.group);
-  buildCourthouse(group);
+  const track = buildTrack();
+  group.add(track.group);
+  buildFacultad(group);
+  buildCasa(group);
   const spots = [];
   const rnd = seeded(11);
-  buildCrossingProps(group, spots);
   buildLandmarks(group, spots);
   buildTown(group, rnd, spots);
   buildTrees(group, rnd, spots, quality);
-  buildDecks(group);
   mergeStatic(group);
-  return { group, roads };
+  return { group, track };
 }
 
 export { PIECE_Y };

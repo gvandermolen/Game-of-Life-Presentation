@@ -98,18 +98,24 @@ export class Spinner {
   }
 
   // Returns a spin plan; `angleAt(t)` is a pure function of elapsed seconds.
+  // The wheel is rigged: it always stops on `value`. For suspense it first comes
+  // to a near halt on the neighbouring number, then creeps over the peg.
   plan(value, duration, jitter = 0) {
     const seg = TWO_PI / this.count;
     const start = this.angle;
-    const want = this.targetFor(value) + jitter * seg * 0.32;
+    // Just past the peg that separates `value` from the number before it.
+    const want = this.targetFor(value) - seg * (0.34 - Math.abs(jitter) * 0.08);
     const turns = 4 + Math.floor(duration);
     let end = want + TWO_PI * Math.ceil((start + turns * TWO_PI - want) / TWO_PI);
     if (end < start + turns * TWO_PI) end += TWO_PI;
-    const ease = (x) => 1 - Math.pow(1 - x, 3.4);
+    const hold = end - seg * 0.26;
+    const t1 = duration * 0.8;
+    const ease = (x) => 1 - Math.pow(1 - x, 3.2);
+    const creep = (x) => x * x * (3 - 2 * x);
     return {
       duration,
       end,
-      angleAt: (t) => start + (end - start) * ease(Math.min(1, t / duration)),
+      angleAt: (t) => (t < t1 ? start + (hold - start) * ease(t / t1) : hold + (end - hold) * creep(Math.min(1, (t - t1) / (duration - t1)))),
     };
   }
 

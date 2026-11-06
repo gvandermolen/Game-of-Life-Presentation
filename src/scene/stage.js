@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import studioHdr from '../assets/studio.hdr';
-import { LANE_LENGTH, crossingAt } from '../engine/board.js';
+import { AUTOS } from '../content/guion.js';
+import { activeCar, carPlaces, revealed } from '../engine/flow.js';
 import { buildBoard, PIECE_Y } from './board.js';
-import { BOARD, SPINNER_POS, crossingCenter, laneSquare } from './layout.js';
+import { BOARD, ENTRY, MAIN, SPINNER_POS, destinoSlot, forkSlot, queueSlot, squareS } from './layout.js';
 import { UBA } from './palette.js';
 import { Post } from './post.js';
 import { Spinner } from './spinner.js';
-import { buildPiece, setPieceColor } from './vehicles.js';
+import { buildPiece } from './vehicles.js';
 import { GpuTimer } from './gpu-timer.js';
 
 // About 45 fps of headroom; the CPU side of a frame is only a few milliseconds.
@@ -20,13 +21,20 @@ const QUALITY = {
   bajo: { pixelRatio: 1, shadow: 1024, shadows: false, post: null },
 };
 
+export const PIECE_SCALE = 1.25;
+
 const VIEWS = {
   overview: { pos: [0, 44.5, 35.5], look: [0, -1.5, 2.6] },
   intro: { pos: [-34, 9, 40], look: [0, 0, 0] },
-  spinner: { pos: [SPINNER_POS.x, 10, SPINNER_POS.z + 9], look: [SPINNER_POS.x, 0.4, SPINNER_POS.z - 0.4] },
+  spinner: { pos: [SPINNER_POS.x, 10.5, SPINNER_POS.z + 9.5], look: [SPINNER_POS.x, 0.4, SPINNER_POS.z - 0.3] },
+  salida: { pos: [-15.5, 13, 25], look: [-16.5, 0, 9.5] },
+  fork: { pos: [-11, 21, 25], look: [-15.8, 0, 6.2] },
+  // Steep enough to see the dead end over the gantry.
+  barrier: { pos: [-15.5, 22, 12.5], look: [-19, 0, 3.2] },
 };
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
+export const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 
 export class Stage {
   constructor(container, { quality = 'alto', onSpinTick } = {}) {
@@ -35,15 +43,17 @@ export class Stage {
     this.onSpinTick = onSpinTick;
     this.speed = 1;
     this.fast = false;
-    this.pieces = new Map();
+    this.pieces = [];
+    this.at = [];
     this.tasks = new Set();
+    this.frameHooks = new Set();
     this.clock = new THREE.Clock();
     this.time = 0;
-    this.activeId = null;
+    this.activeIndex = null;
     this.shake = 0;
   }
 
-  async init(roster) {
+  async init() {
     const r = new THREE.WebGLRenderer({ antialias: !this.q.post, powerPreference: 'high-performance' });
     r.setPixelRatio(Math.min(window.devicePixelRatio || 1, this.q.pixelRatio));
     r.setSize(this.container.clientWidth, this.container.clientHeight);
@@ -67,7 +77,7 @@ export class Stage {
     scene.environmentIntensity = 0.5;
     this.scene = scene;
 
-    scene.add(new THREE.HemisphereLight('#fff4e0', '#3a2616', 0.42));
+    const hemi = new THREE.HemisphereLight('#fff4e0', '#3a2616', 0.42);
     const sun = new THREE.DirectionalLight('#ffe8c7', 2.3);
     sun.position.set(-16, 34, 18);
     sun.castShadow = this.q.shadows;
@@ -82,33 +92,37 @@ export class Stage {
     sun.shadow.bias = -0.0004;
     sun.shadow.normalBias = 0.03;
     sun.shadow.radius = 3;
-    scene.add(sun);
     const fill = new THREE.DirectionalLight('#bcd4ff', 0.55);
     fill.position.set(22, 18, -14);
-    scene.add(fill);
     const spot = new THREE.SpotLight('#fff2d8', 70, 120, 0.55, 0.65, 1.4);
     spot.position.set(0, 46, 8);
     spot.target.position.set(0, 0, 0);
-    scene.add(spot, spot.target);
+    scene.add(hemi, sun, fill, spot, spot.target);
+    this.lights = [hemi, sun, fill, spot].map((l) => ({ l, base: l.intensity }));
+    this.dimLevel = 1;
 
     this.camera = new THREE.PerspectiveCamera(34, this.container.clientWidth / this.container.clientHeight, 2, 300);
     this.camPos = new THREE.Vector3(...VIEWS.intro.pos);
     this.camLook = new THREE.Vector3(...VIEWS.intro.look);
     this.camera.position.copy(this.camPos);
-    this.wantPos = new THREE.Vector3(...VIEWS.overview.pos);
-    this.wantLook = new THREE.Vector3(...VIEWS.overview.look);
+    this.wantPos = this.camPos.clone();
+    this.wantLook = this.camLook.clone();
     this.camRate = 1.1;
 
-    const { group, roads } = buildBoard(roster, this.q === QUALITY.bajo ? 'bajo' : 'alto');
+    const { group, track } = buildBoard(this.q === QUALITY.bajo ? 'bajo' : 'alto');
     scene.add(group);
-    this.roads = roads;
+    this.track = track;
 
     this.spinner = new Spinner(10);
     this.spinner.group.position.copy(SPINNER_POS);
     scene.add(this.spinner.group);
 
+    // Transient props of the current animation (fallen tree, windmill...).
+    this.fx = new THREE.Group();
+    scene.add(this.fx);
+
     this.buildMarkers();
-    this.setRoster(roster);
+    this.buildPieces();
     if (this.q.post) this.post = new Post(r, scene, this.camera, this.q.post);
 
     window.addEventListener('resize', () => this.resize());
@@ -117,10 +131,10 @@ export class Stage {
 
   buildMarkers() {
     const gold = new THREE.MeshStandardMaterial({ color: UBA.gold, emissive: '#7a4f00', emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.25 });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.05, 12, 64), gold);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.66 * PIECE_SCALE, 0.06, 12, 64), gold);
     ring.rotation.x = Math.PI / 2;
     this.activeRing = ring;
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.45, 24), gold);
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.52, 24), gold);
     cone.rotation.x = Math.PI;
     cone.castShadow = true;
     this.activeArrow = cone;
@@ -132,25 +146,16 @@ export class Stage {
     this.scene.add(this.shards);
   }
 
-  setRoster(roster) {
-    for (const p of this.pieces.values()) this.scene.remove(p);
-    this.pieces.clear();
-    this.roster = roster;
-    for (const team of roster.filter((t) => t.enabled)) {
-      const piece = buildPiece(team);
-      this.pieces.set(team.id, piece);
+  buildPieces() {
+    AUTOS.forEach((a, i) => {
+      const piece = buildPiece({ id: a.vehiculo, color: a.color });
+      piece.scale.setScalar(PIECE_SCALE);
+      piece.visible = false;
+      this.pieces.push(piece);
+      this.at.push(null);
       this.scene.add(piece);
-    }
-  }
-
-  // Start names are rebuilt as text meshes, so colour-picker drags are debounced.
-  recolor(roster) {
-    clearTimeout(this.repaintTimer);
-    this.repaintTimer = setTimeout(() => this.roads.recolor(roster), 120);
-    for (const t of roster) {
-      const piece = this.pieces.get(t.id);
-      if (piece) setPieceColor(piece, t.color);
-    }
+      piece.userData.index = i;
+    });
   }
 
   resize() {
@@ -162,51 +167,69 @@ export class Stage {
     this.camera.updateProjectionMatrix();
   }
 
-  // Placement for a team at a position, given who else shares the square.
-  placement(state, teamId) {
-    const team = state.teams.find((t) => t.id === teamId);
-    return this.placementAt(state, team, team.pos);
-  }
+  // ---------------------------------------------------------------- placement
 
-  placementAt(state, team, pos) {
-    const id = pos > 0 && pos < LANE_LENGTH ? crossingAt(team.lane, pos) : null;
-    const sq = laneSquare(team.lane, pos);
-    if (id) {
-      const here = state.teams.filter((t) => !t.finished && crossingAt(t.lane, t.pos) === id);
-      if (here.length > 1 && here.includes(team)) {
-        const c = crossingCenter(id);
-        const i = here.indexOf(team);
-        const a = sq.heading + (i / here.length) * Math.PI * 2 + Math.PI / 4;
-        const p = new THREE.Vector3(c.x + Math.cos(a) * 0.72, PIECE_Y, c.z - Math.sin(a) * 0.72);
-        return { pos: p, heading: a + Math.PI + 0.5 };
-      }
+  // Path and arc length for a place from flow.carPlaces().
+  spotOf(place, c) {
+    switch (place.at) {
+      case 'horquilla':
+        return { path: ENTRY, s: forkSlot(place.slot) };
+      case 'cola':
+        return { path: MAIN, s: queueSlot(place.slot) };
+      case 'casilla':
+        return { path: MAIN, s: squareS(place.square) };
+      case 'destino':
+        return { path: MAIN, s: destinoSlot(c) };
+      default:
+        return null;
     }
-    return { pos: new THREE.Vector3(sq.pos.x, PIECE_Y, sq.pos.z), heading: sq.heading };
   }
 
+  // Put car c on a frame of a path, with optional offsets for animations.
+  pose(c, frame, { lateral = 0, lift = 0, yaw = 0, roll = 0, pitch = 0 } = {}) {
+    const piece = this.pieces[c];
+    piece.position.set(frame.p.x + frame.normal.x * lateral, PIECE_Y, frame.p.z + frame.normal.z * lateral);
+    piece.rotation.y = frame.heading + yaw;
+    const L = piece.userData.lift;
+    L.position.y = lift;
+    L.rotation.set(roll, 0, pitch);
+  }
+
+  place(c, path, s, opts) {
+    this.at[c] = { path, s };
+    this.pose(c, path.at(s), opts);
+  }
+
+  // Everything derived from the state, without animation.
   snap(state) {
-    for (const t of state.teams) {
-      const piece = this.pieces.get(t.id);
-      if (!piece) continue;
-      const { pos, heading } = this.placement(state, t.id);
-      piece.position.copy(pos);
-      piece.rotation.y = heading;
-      piece.userData.lift.position.y = 0;
-      piece.userData.lift.rotation.set(0, 0, 0);
-    }
-    this.setActive(state.phase === 'finished' ? null : state.teams[state.turn]?.id);
+    this.tidy();
+    carPlaces(state).forEach((place, c) => {
+      const spot = this.spotOf(place, c);
+      const piece = this.pieces[c];
+      piece.visible = !!spot;
+      if (spot) this.place(c, spot.path, spot.s);
+      else this.at[c] = null;
+    });
+    this.track.reveal(revealed(state));
+    this.setActive(activeCar(state));
   }
 
-  setActive(id) {
-    this.activeId = id;
+  setActive(i) {
+    this.activeIndex = i;
   }
 
   setSpeed(x) {
     this.speed = x;
   }
 
+  // Finish every running animation now and play the rest of the step instantly,
+  // until endSkip().
   skipAnimations() {
     this.fast = true;
+  }
+
+  endSkip() {
+    this.fast = false;
   }
 
   dur(s) {
@@ -225,46 +248,155 @@ export class Stage {
     return this.task(this.dur(seconds), () => {});
   }
 
+  // ---------------------------------------------------------------- camera
+
   view(name, rate = 1.6) {
     const v = VIEWS[name];
     if (!v) return;
-    this.followId = null;
+    this.followIndex = null;
     this.wantPos.set(...v.pos);
     this.wantLook.set(...v.look);
     this.camRate = rate;
   }
 
-  focusPoint(p, { dist = 13, height = 13, rate = 2.2 } = {}) {
-    this.followId = null;
+  focusPoint(p, { dist = 11, height = 10, rate = 2.2 } = {}) {
+    this.followIndex = null;
     const x = THREE.MathUtils.clamp(p.x, -BOARD.width / 2 + 4, BOARD.width / 2 - 4);
     const z = THREE.MathUtils.clamp(p.z, -BOARD.depth / 2 + 3, BOARD.depth / 2 - 2);
     this.wantLook.set(x, 0, z);
-    this.wantPos.set(x * 0.85, height, z + dist);
+    this.wantPos.set(x * 0.9, height, z + dist);
     this.camRate = rate;
   }
 
-  // Keep a point visible in the upper third of the screen, above an open card.
-  frameAbove(p) {
-    this.followId = null;
-    const x = THREE.MathUtils.clamp(p.x, -BOARD.width / 2 + 5, BOARD.width / 2 - 5);
-    const z = THREE.MathUtils.clamp(p.z, -BOARD.depth / 2 + 3, BOARD.depth / 2 - 2);
-    this.wantLook.set(x, 0, z + 7.5);
-    this.wantPos.set(x * 0.92, 19, z + 7.5 + 13);
+  // Keep a point in the left part of the screen, beside the card on the right.
+  frameCard(p) {
+    this.followIndex = null;
+    const x = p.x + 5.2;
+    const z = p.z + 1.2;
+    this.wantLook.set(x, 0, z);
+    this.wantPos.set(x, 13.5, z + 12.5);
     this.camRate = 1.6;
   }
 
-  piecePosition(teamId) {
-    return this.pieces.get(teamId)?.position;
-  }
-
-  follow(teamId, opts = {}) {
-    this.followId = teamId;
-    this.followOpts = { dist: 12, height: 12.5, ...opts };
+  follow(i, opts = {}) {
+    this.followIndex = i;
+    this.followOpts = { dist: 12, height: 11.5, ...opts };
     this.camRate = opts.rate || 2.4;
   }
 
+  // Screen position (CSS pixels) of a world point, or null when behind the camera.
+  screenOf(v) {
+    const p = v.clone().project(this.camera);
+    if (p.z > 1) return null;
+    return { x: (p.x * 0.5 + 0.5) * this.container.clientWidth, y: (-p.y * 0.5 + 0.5) * this.container.clientHeight };
+  }
+
+  pieceTop(c, height = 1.25) {
+    const piece = this.pieces[c];
+    return piece.position.clone().add(new THREE.Vector3(0, height * PIECE_SCALE + piece.userData.lift.position.y, 0));
+  }
+
+  // ---------------------------------------------------------------- motion
+
+  // Arc length of every other car currently on the board road.
+  othersOnMain(c) {
+    return this.at.map((a, j) => (j !== c && a?.path === MAIN ? a.s : null)).filter((s) => s !== null);
+  }
+
+  // Drive car c along the board road from s0 to s1. Parked cars on the way are
+  // hopped over, like lifting a piece over the others. `shape(k, s)` may add
+  // lateral offsets, lift or rotation for an animation.
+  async drive(c, s0, s1, { seconds, ease = easeInOut, shape, hop = true } = {}) {
+    const others = hop ? this.othersOnMain(c) : [];
+    const secs = seconds ?? 0.7 + Math.abs(s1 - s0) * 0.14;
+    await this.task(this.dur(secs), (k) => {
+      const s = s0 + (s1 - s0) * ease(k);
+      let bump = 0;
+      for (const o of others) bump = Math.max(bump, Math.exp(-(((s - o) / 1.05) ** 2)));
+      const extra = shape?.(k, s) || {};
+      this.pose(c, MAIN.at(s), { ...extra, lift: bump + (extra.lift || 0) });
+    });
+    this.at[c] = { path: MAIN, s: s1 };
+  }
+
+  // Several cars along a route at once, each from its own start to its own end.
+  async convoy(route, from, to, { seconds = 2.4, ease = easeInOut } = {}) {
+    const cars = from.map((_, c) => c);
+    await this.task(this.dur(seconds), (k) => {
+      const e = ease(k);
+      for (const c of cars) this.pose(c, route.at(from[c] + (to[c] - from[c]) * e));
+    });
+  }
+
+  // Cars pop out at the Facultad, one by one, and line up at the fork.
+  async appear(onPop) {
+    const start = 0.35;
+    const jobs = this.pieces.map(async (piece, c) => {
+      await this.wait(0.25 + c * 0.45);
+      piece.visible = true;
+      this.place(c, ENTRY, start);
+      onPop?.(c);
+      await this.task(this.dur(0.4), (k) => {
+        const s = 0.0001 + Math.sin(k * Math.PI * 0.5) * 1.1;
+        piece.scale.setScalar(PIECE_SCALE * Math.min(1, s));
+        piece.userData.lift.position.y = Math.sin(k * Math.PI) * 0.6;
+      });
+      piece.scale.setScalar(PIECE_SCALE);
+      const end = forkSlot(c);
+      await this.task(this.dur(1.1 + (end - start) * 0.08), (k) => this.pose(c, ENTRY.at(start + (end - start) * easeInOut(k))));
+      this.at[c] = { path: ENTRY, s: end };
+    });
+    await Promise.all(jobs);
+  }
+
+  // All cars from their last squares to the parking in front of home.
+  async arrive() {
+    const jobs = this.pieces.map((_, c) => {
+      const from = this.at[c]?.s ?? squareS(13 + c);
+      return this.drive(c, from, destinoSlot(c), { seconds: 2.6, hop: false });
+    });
+    await Promise.all(jobs);
+  }
+
+  // Shake car c's body: a quick jolt after a hit.
+  async jolt(c, strength = 1, seconds = 0.5) {
+    const L = this.pieces[c].userData.lift;
+    await this.task(this.dur(seconds), (k) => {
+      const d = (1 - k) * strength;
+      L.rotation.x = Math.sin(k * 38) * 0.22 * d;
+      L.rotation.z = Math.cos(k * 31) * 0.16 * d;
+      L.position.y = Math.abs(Math.sin(k * 20)) * 0.12 * d;
+    });
+    L.rotation.set(0, 0, 0);
+    L.position.y = 0;
+  }
+
+  async burst(pos, seconds = 1.0) {
+    this.shake = 1;
+    const dummy = new THREE.Object3D();
+    const vel = [];
+    for (let i = 0; i < this.shards.count; i++) {
+      const a = (i / this.shards.count) * Math.PI * 2;
+      const s = 2.2 + ((i * 37) % 10) * 0.25;
+      vel.push(new THREE.Vector3(Math.cos(a) * s, 3 + ((i * 13) % 7) * 0.5, Math.sin(a) * s));
+    }
+    this.shards.visible = true;
+    await this.task(this.dur(seconds), (k) => {
+      const t = k * seconds;
+      for (let i = 0; i < this.shards.count; i++) {
+        dummy.position.set(pos.x + vel[i].x * t, PIECE_Y + 0.4 + vel[i].y * t - 6 * t * t, pos.z + vel[i].z * t);
+        dummy.rotation.set(t * 9 + i, t * 7, 0);
+        dummy.scale.setScalar(Math.max(0.001, 1 - k));
+        dummy.updateMatrix();
+        this.shards.setMatrixAt(i, dummy.matrix);
+      }
+      this.shards.instanceMatrix.needsUpdate = true;
+    });
+    this.shards.visible = false;
+  }
+
   async spin(value) {
-    const plan = this.spinner.plan(value, this.dur(3.4), Math.sin(this.time * 13.7) * 0.9);
+    const plan = this.spinner.plan(value, this.dur(4.2), Math.sin(this.time * 13.7));
     let lastSeg = this.spinner.segmentAt();
     await this.task(plan.duration, (k) => {
       const a = plan.angleAt(k * plan.duration);
@@ -280,96 +412,49 @@ export class Stage {
     this.spinner.setAngle(plan.end % (Math.PI * 2));
   }
 
-  async hop(teamId, to, height = 0.55, seconds = 0.3) {
-    const piece = this.pieces.get(teamId);
-    const lift = piece.userData.lift;
-    const p0 = piece.position.clone();
-    const h0 = piece.rotation.y;
-    let dh = to.heading - h0;
-    dh = Math.atan2(Math.sin(dh), Math.cos(dh));
-    await this.task(this.dur(seconds), (k) => {
-      const e = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
-      piece.position.lerpVectors(p0, to.pos, e);
-      piece.rotation.y = h0 + dh * e;
-      lift.position.y = Math.sin(Math.PI * k) * height;
-      lift.rotation.z = Math.sin(Math.PI * k) * 0.12;
+  // Reveal one more plaque with a little spring.
+  async popPlaque(k) {
+    const g = this.track.plaques[k - 1];
+    if (!g) return;
+    g.visible = true;
+    await this.task(this.dur(0.6), (t) => {
+      const e = 1 + Math.sin(t * Math.PI) * 0.25 * (1 - t);
+      g.scale.setScalar(Math.max(0.001, Math.min(1, t * 2.2)) * e);
     });
-    lift.position.y = 0;
-    lift.rotation.z = 0;
+    g.scale.setScalar(1);
   }
 
-  // Walk a piece square by square. `state` is the state after the move.
-  async walk(teamId, path, state, onStep) {
-    const team = state.teams.find((t) => t.id === teamId);
-    for (let i = 0; i < path.length; i++) {
-      const last = i === path.length - 1;
-      const target = last ? this.placement(state, teamId) : this.placementAt(state, team, path[i]);
-      await this.hop(teamId, target);
-      onStep?.(path[i]);
+  // ---------------------------------------------------------------- lighting
+
+  setDim(level) {
+    this.dimLevel = level;
+    for (const { l, base } of this.lights) l.intensity = base * level;
+    this.scene.environmentIntensity = 0.5 * level;
+  }
+
+  async dim(to, seconds = 0.8) {
+    const from = this.dimLevel;
+    await this.task(this.dur(seconds), (k) => this.setDim(from + (to - from) * easeInOut(k)));
+  }
+
+  clearFx() {
+    for (const child of [...this.fx.children]) this.fx.remove(child);
+    this.frameHooks.clear();
+  }
+
+  // Undo what the last animation left behind (props, dim lights, a squashed roof).
+  tidy() {
+    this.clearFx();
+    this.setDim(1);
+    for (const piece of this.pieces) {
+      piece.userData.vehicle.scale.set(1, 1, 1);
+      piece.scale.setScalar(PIECE_SCALE);
+      piece.userData.lift.position.y = 0;
+      piece.userData.lift.rotation.set(0, 0, 0);
     }
   }
 
-  async slide(teamId, state) {
-    const target = this.placement(state, teamId);
-    await this.hop(teamId, target, 0.9, 0.6);
-  }
-
-  // Re-seat pieces that share a cruce (or left one) without animation drama.
-  async settle(state) {
-    const jobs = [];
-    for (const t of state.teams) {
-      const piece = this.pieces.get(t.id);
-      if (!piece) continue;
-      const target = this.placement(state, t.id);
-      if (piece.position.distanceTo(target.pos) > 0.05) jobs.push(this.hop(t.id, target, 0.25, 0.35));
-    }
-    await Promise.all(jobs);
-  }
-
-  async crash(cruce, teamIds) {
-    const pos = crossingCenter(cruce);
-    this.focusPoint(pos, { dist: 9, height: 8.5, rate: 3.2 });
-    await this.wait(0.45);
-    this.shake = 1;
-    const dummy = new THREE.Object3D();
-    const vel = [];
-    for (let i = 0; i < this.shards.count; i++) {
-      const a = (i / this.shards.count) * Math.PI * 2;
-      const s = 2.2 + ((i * 37) % 10) * 0.25;
-      vel.push(new THREE.Vector3(Math.cos(a) * s, 3 + ((i * 13) % 7) * 0.5, Math.sin(a) * s));
-    }
-    this.shards.visible = true;
-    const pieces = teamIds.map((id) => this.pieces.get(id)).filter(Boolean);
-    await this.task(this.dur(1.1), (k) => {
-      const t = k * 1.1;
-      for (let i = 0; i < this.shards.count; i++) {
-        dummy.position.set(pos.x + vel[i].x * t, PIECE_Y + 0.4 + vel[i].y * t - 6 * t * t, pos.z + vel[i].z * t);
-        dummy.rotation.set(t * 9 + i, t * 7, 0);
-        dummy.scale.setScalar(Math.max(0.001, 1 - k));
-        dummy.updateMatrix();
-        this.shards.setMatrixAt(i, dummy.matrix);
-      }
-      this.shards.instanceMatrix.needsUpdate = true;
-      pieces.forEach((p, i) => {
-        p.userData.lift.rotation.z = Math.sin(k * 40 + i) * 0.25 * (1 - k);
-        p.userData.lift.rotation.x = Math.cos(k * 33 + i) * 0.2 * (1 - k);
-      });
-    });
-    this.shards.visible = false;
-    pieces.forEach((p) => p.userData.lift.rotation.set(0, 0, 0));
-  }
-
-  async celebrate(teamId) {
-    const piece = this.pieces.get(teamId);
-    if (!piece) return;
-    this.focusPoint(piece.position, { dist: 10, height: 7.5, rate: 1.6 });
-    await this.task(this.dur(1.6), (k) => {
-      piece.userData.lift.position.y = Math.abs(Math.sin(k * Math.PI * 3)) * 0.8 * (1 - k * 0.5);
-      piece.userData.lift.rotation.y = k * Math.PI * 2;
-    });
-    piece.userData.lift.position.y = 0;
-    piece.userData.lift.rotation.y = 0;
-  }
+  // ---------------------------------------------------------------- frame
 
   // While a frame costs too much, give up ambient occlusion first, then resolution,
   // one step every two seconds. GPU time is preferred over frame rate because the
@@ -407,33 +492,34 @@ export class Stage {
       this.time += dt;
       this.adapt(dt);
       for (const t of [...this.tasks]) {
-        const k = Math.min(1, (this.time - t.start) / t.seconds);
+        const k = this.fast ? 1 : Math.min(1, (this.time - t.start) / t.seconds);
         t.fn(k);
         if (k >= 1) {
           this.tasks.delete(t);
           t.resolve();
         }
       }
-      if (!this.tasks.size) this.fast = false;
+      for (const fn of this.frameHooks) fn(dt, this.time);
       this.updateCamera(dt);
       this.updateMarkers();
       const timing = !this.adapted && this.gpu?.begin();
       if (this.post) this.post.render();
       else this.renderer.render(this.scene, this.camera);
       if (timing) this.gpu.end();
+      this.onFrame?.();
     };
     tick();
   }
 
   updateCamera(dt) {
-    if (this.followId) {
-      const p = this.pieces.get(this.followId)?.position;
+    if (this.followIndex != null) {
+      const p = this.pieces[this.followIndex]?.position;
       if (p) {
         const { dist, height } = this.followOpts;
         const x = THREE.MathUtils.clamp(p.x, -BOARD.width / 2 + 4, BOARD.width / 2 - 4);
         const z = THREE.MathUtils.clamp(p.z, -BOARD.depth / 2 + 3, BOARD.depth / 2 - 2);
         this.wantLook.set(x, 0, z);
-        this.wantPos.set(x * 0.85, height, z + dist);
+        this.wantPos.set(x * 0.88, height, z + dist);
       }
     }
     const k = damp(this.camRate, dt);
@@ -451,17 +537,23 @@ export class Stage {
   }
 
   updateMarkers() {
-    const p = this.activeId && this.pieces.get(this.activeId);
+    const i = this.activeIndex;
+    const p = i != null && this.pieces[i]?.visible ? this.pieces[i] : null;
     this.activeRing.visible = this.activeArrow.visible = !!p;
+    this.pieces.forEach((piece, j) => {
+      const want = j === i ? 1.12 : 1;
+      piece.userData.grow = (piece.userData.grow ?? 1) + (want - (piece.userData.grow ?? 1)) * 0.12;
+      piece.userData.lift.scale.setScalar(piece.userData.grow);
+    });
     if (p) {
       const lift = p.userData.lift.position.y;
       this.activeRing.position.set(p.position.x, p.position.y + 0.03, p.position.z);
       const s = 1 + Math.sin(this.time * 4) * 0.06;
       this.activeRing.scale.set(s, s, s);
-      this.activeArrow.position.set(p.position.x, p.position.y + 1.55 + lift + Math.sin(this.time * 3) * 0.12, p.position.z);
+      this.activeArrow.position.set(p.position.x, p.position.y + 1.95 * PIECE_SCALE + lift + Math.sin(this.time * 3) * 0.14, p.position.z);
       this.activeArrow.rotation.y = this.time * 1.5;
     }
-    for (const piece of this.pieces.values()) {
+    for (const piece of this.pieces) {
       piece.traverse((o) => {
         if (o.userData?.bob) o.position.y = o.userData.bob + Math.sin(this.time * 3 + piece.position.x) * 0.05;
       });

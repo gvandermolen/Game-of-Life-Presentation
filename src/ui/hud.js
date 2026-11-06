@@ -1,161 +1,114 @@
-import { CRUCES, LANE_LENGTH } from '../engine/board.js';
-import { SQUARE_STYLE } from '../scene/palette.js';
-import { $, el, esc } from './dom.js';
+import { AUTOS, casilla } from '../content/guion.js';
+import { CARS, ROUNDS, TURNS, playedTurns, turnInfo } from '../engine/flow.js';
+import { inkOn } from './cards.js';
+import { el, esc } from './dom.js';
 import { icon, vehicleSVG } from './icons.js';
 
-// A roundabout, for the one square type without a glyph of its own.
-const RING = '<svg viewBox="0 0 16 16" width="0.9em" height="0.9em" aria-hidden="true"><circle cx="8" cy="8" r="5" fill="none" stroke="currentColor" stroke-width="2.6"/></svg>';
+const HINTS = {
+  bifurcacion: '<kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> o clic en un camino',
+  listo: '<kbd>Espacio</kbd> girar la ruedita',
+  pregunta: '<kbd>Espacio</kbd> ver la respuesta',
+  respuesta: '<kbd>Espacio</kbd> siguiente turno',
+  llegada: '<kbd>Espacio</kbd> sentencias',
+  sentencias: '<kbd>Espacio</kbd> siguiente sentencia',
+  ruedita: '<kbd>Espacio</kbd> continuar',
+};
 
-const LEGEND_TYPES = ['pregunta', 'dilema', 'apelacion', 'multa', 'bonus', 'control', 'cruce'];
-
-function signed(n) {
-  return n > 0 ? `+${n}` : `${n}`;
-}
-
-export function effectText(type, rules) {
-  const fx = rules.efectos;
-  switch (type) {
-    case 'pregunta':
-      return `4 opciones · correcta ${signed(fx.preguntaOk)}`;
-    case 'dilema':
-      return `2 posturas · ${signed(fx.dilemaOk)} / ${signed(fx.dilemaFail)}`;
-    case 'apelacion':
-      return `Si prospera ${signed(fx.apelacionOk)}`;
-    case 'multa':
-      return `Retrocede ${Math.abs(fx.multa)}`;
-    case 'bonus':
-      return 'Gira otra vez';
-    case 'control':
-      return `Pierde ${fx.controlTurnos} turno`;
-    case 'cruce':
-      return rules.crucesObligatorios ? 'Parada obligatoria · choque' : 'Choque si está ocupado';
-    default:
-      return '';
-  }
-}
-
+// Top bar (title, whose turn, tools), the strip of the four teams, the spin
+// result and a name tag floating over each car.
 export class Hud {
   constructor(root, app) {
     this.app = app;
     this.root = root;
-    root.insertAdjacentHTML(
-      'beforeend',
-      `
-      <header class="topbar">
+    this.top = el(`
+      <div class="topbar">
         <div class="brand">
-          <div class="brand-mark">FD</div>
-          <div><div class="brand-title" data-k="title"></div><div class="brand-sub" data-k="sub"></div></div>
+          <div class="brand-mark">JC</div>
+          <div><div class="brand-title">El juego de los contratos</div><div class="brand-sub">Transporte · Grupo 7</div></div>
         </div>
-        <div class="turn hidden" data-k="turn"></div>
+        <div class="turn hidden"></div>
         <div class="tools">
-          <button class="tool" data-act="overview" title="Ver tablero completo (V)">${icon('board')}</button>
-          <button class="tool" data-act="legend" title="Leyenda (L)">${icon('legend')}</button>
-          <button class="tool" data-act="sound" title="Sonido (M)"></button>
-          <button class="tool" data-act="full" title="Pantalla completa (F)">${icon('full')}</button>
-          <button class="tool" data-act="config" title="Configuración (C)">${icon('gear')}</button>
+          <button class="tool" data-cmd="back" title="Atrás (←)">${icon('undo')}</button>
+          <button class="tool" data-cmd="overview" title="Vista general (V)">${icon('board')}</button>
+          <button class="tool" data-cmd="sound" title="Sonido (M)"></button>
+          <button class="tool" data-cmd="full" title="Pantalla completa (F)">${icon('full')}</button>
+          <button class="tool" data-cmd="menu" title="Menú (G)">${icon('legend')}</button>
         </div>
-      </header>
-      <aside class="legend" data-k="legend"></aside>
-      <footer class="teams" data-k="teams"></footer>
-      <div id="toasts"></div>
-      <div class="spin-result" data-k="spin"></div>
-    `,
-    );
-    root.querySelector('.tools').addEventListener('click', (e) => {
-      const b = e.target.closest('[data-act]');
-      if (b) app.command(b.dataset.act);
+      </div>`);
+    this.teams = el('<div class="teams"></div>');
+    this.spinNode = el('<div class="spin-result"><b></b><span></span></div>');
+    this.tags = el('<div class="tags"></div>');
+    root.append(this.tags, this.top, this.teams, this.spinNode);
+    this.top.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cmd]');
+      if (b) app.command(b.dataset.cmd);
     });
-    this.toasts = $('#toasts', root);
-  }
 
-  q(k) {
-    return this.root.querySelector(`[data-k="${k}"]`);
+    this.teams.innerHTML = AUTOS.map(
+      (a, c) => `
+      <div class="team" style="--team:${a.color}" data-c="${c}">
+        <div class="team-top">${vehicleSVG(a.vehiculo, a.color)}<div><div class="team-name">${esc(a.grupo)}</div><div class="team-sub">${esc(a.nombre)}</div></div></div>
+        <div class="dots">${Array.from({ length: ROUNDS }, () => '<i></i>').join('')}</div>
+      </div>`,
+    ).join('');
+    this.tags.innerHTML = AUTOS.map((a, c) => `<div class="tag" style="--team:${a.color};--team-ink:${inkOn(a)}" data-c="${c}">${esc(a.grupo)}</div>`).join('');
+    this.tagNodes = [...this.tags.children];
   }
 
   render(state) {
-    const { settings, roster } = this.app.session.data;
-    this.q('title').textContent = settings.titulo;
-    this.q('sub').textContent = settings.subtitulo;
-    this.root.querySelector('[data-act="sound"]').innerHTML = icon(settings.sonido ? 'soundOn' : 'soundOff');
-    this.root.querySelector('[data-act="sound"]').classList.toggle('on', !settings.sonido);
-    this.root.querySelector('[data-act="legend"]').classList.toggle('on', settings.leyenda);
+    this.root.dataset.phase = state.phase;
+    this.root.dataset.step = state.step || '';
+    const s = this.app.store.settings;
+    this.top.querySelector('[data-cmd="sound"]').innerHTML = icon(s.sonido ? 'soundOn' : 'soundOff');
+    this.top.querySelector('[data-cmd="back"]').disabled = !this.app.store.canBack();
 
-    this.renderLegend(state, settings.leyenda);
-    this.renderTurn(state, roster);
-    this.renderTeams(state, roster);
+    const turn = this.top.querySelector('.turn');
+    const lastVerdict = state.phase === 'sentencias' && state.shown >= AUTOS.length;
+    const hint = lastVerdict ? '<kbd>Espacio</kbd> la ruedita' : HINTS[state.phase === 'turno' ? state.step : state.phase];
+    if (state.phase === 'turno') {
+      const { car, square } = turnInfo(state.turn);
+      const a = AUTOS[car];
+      const c = casilla(state.turn);
+      turn.style.setProperty('--team', a.color);
+      turn.innerHTML = `
+        <div class="turn-chip">${vehicleSVG(a.vehiculo, a.color)}</div>
+        <div><div class="turn-label">Turno ${state.turn + 1} de ${TURNS} · Casilla ${square}${state.step === 'listo' ? '' : ` · ${esc(c.titulo)}`}</div><div class="turn-name">${esc(a.grupo)} · ${esc(a.nombre)}</div></div>
+        <div class="turn-hint">${hint}</div>`;
+      turn.classList.remove('hidden');
+    } else if (hint) {
+      turn.style.removeProperty('--team');
+      turn.innerHTML = `<div class="turn-hint solo">${hint}</div>`;
+      turn.classList.remove('hidden');
+    } else turn.classList.add('hidden');
+
+    const played = playedTurns(state);
+    const active = state.phase === 'turno' ? turnInfo(state.turn).car : null;
+    this.teams.querySelectorAll('.team').forEach((node, c) => {
+      const done = played > c ? Math.floor((played - 1 - c) / CARS) + 1 : 0;
+      node.classList.toggle('active', c === active);
+      node.querySelectorAll('.dots i').forEach((d, i) => d.classList.toggle('on', i < done));
+    });
   }
 
-  renderLegend(state, visible) {
-    const lg = this.q('legend');
-    lg.classList.toggle('hidden', !visible);
-    lg.innerHTML =
-      `<h4>Casillas</h4>` +
-      LEGEND_TYPES.map((t) => {
-        const st = SQUARE_STYLE[t];
-        const glyph = st.glyph === 'stop' ? '■' : st.glyph ? esc(st.glyph) : RING;
-        return `<div class="legend-row"><span class="legend-sw" style="background:${st.color};color:${st.ink}">${glyph}</span><span class="legend-name">${esc(st.word || t)}<span class="legend-fx">${esc(effectText(t, state.rules))}</span></span></div>`;
-      }).join('');
+  showSpin(value, who) {
+    const b = this.spinNode.querySelector('b');
+    b.textContent = value;
+    b.dataset.n = value;
+    this.spinNode.querySelector('span').textContent = who;
+    this.spinNode.classList.remove('show');
+    void this.spinNode.offsetWidth;
+    this.spinNode.classList.add('show');
   }
 
-  renderTurn(state, roster, playing = false) {
-    const box = this.q('turn');
-    const team = state.teams[state.turn];
-    if (!team || state.phase === 'finished' || state.phase === 'idle') {
-      box.classList.add('hidden');
-      return;
-    }
-    const r = roster.find((t) => t.id === team.id);
-    const hints = {
-      spin: '<kbd>Espacio</kbd> para girar',
-      card: 'Respondiendo carta',
-      collision: 'Resolviendo choque',
-    };
-    box.style.setProperty('--team', r.color);
-    const hint = playing ? 'En juego…' : hints[state.phase] || '';
-    box.innerHTML = `<div class="turn-chip">${vehicleSVG(r.id, r.color)}</div><div><div class="turn-label">Turno de</div><div class="turn-name">${esc(r.nombre)}</div></div><div class="turn-hint">${hint}</div>`;
-    box.classList.remove('hidden');
-  }
-
-  renderTeams(state, roster) {
-    const strip = this.q('teams');
-    const active = state.phase !== 'finished' ? state.teams[state.turn]?.id : null;
-    strip.innerHTML = state.teams
-      .map((t) => {
-        const r = roster.find((x) => x.id === t.id);
-        const pct = (t.pos / LANE_LENGTH) * 100;
-        let badge = '';
-        if (t.finished) badge = `<span class="badge win">${t.place}° Meta</span>`;
-        else if (t.skip > 0) badge = `<span class="badge warn">Pierde turno</span>`;
-        else if (CRUCES.includes(t.pos)) badge = `<span class="badge">En cruce</span>`;
-        else if (t.id === active) badge = `<span class="badge">En juego</span>`;
-        const ticks = CRUCES.map((c) => `<span class="progress-tick" style="left:${(c / LANE_LENGTH) * 100}%"></span>`).join('');
-        return `<div class="team ${t.id === active ? 'active' : ''} ${t.finished ? 'done' : ''}" style="--team:${r.color}" data-team="${t.id}">
-          <div class="team-top">${vehicleSVG(r.id, r.color)}<div style="min-width:0"><div class="team-name">${esc(r.nombre)}</div><div class="team-sub">Casilla ${t.pos} / ${LANE_LENGTH} ${badge}</div></div></div>
-          <div class="progress"><span class="progress-fill" style="width:${pct}%"></span>${ticks}</div>
-        </div>`;
-      })
-      .join('');
-  }
-
-  toast(text, accent, ms = 2600) {
-    const t = el(`<div class="toast" style="--accent:${accent || 'var(--gold)'}">${esc(text)}</div>`);
-    this.toasts.appendChild(t);
-    while (this.toasts.children.length > 3) this.toasts.firstElementChild.remove();
-    setTimeout(() => {
-      t.classList.add('out');
-      setTimeout(() => t.remove(), 400);
-    }, ms);
-  }
-
-  clearToasts() {
-    this.toasts.innerHTML = '';
-  }
-
-  showSpin(value, teamName) {
-    const s = this.q('spin');
-    s.innerHTML = `<b data-n="${value}">${value}</b><span>${esc(teamName)} avanza</span>`;
-    s.classList.remove('show');
-    void s.offsetWidth;
-    s.classList.add('show');
+  // Called every frame: keep each tag over its car.
+  updateTags() {
+    const st = this.app.stage;
+    this.tagNodes.forEach((node, c) => {
+      const piece = st.pieces[c];
+      const p = piece?.visible ? st.screenOf(st.pieceTop(c, 1.3)) : null;
+      node.classList.toggle('on', !!p);
+      node.classList.toggle('active', c === st.activeIndex);
+      if (p) node.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`;
+    });
   }
 }

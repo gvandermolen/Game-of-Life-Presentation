@@ -1,104 +1,92 @@
 # Mantenimiento
 
-Guía para quien tenga que cambiar el juego. Las tareas de presentador (equipos, reglas, contenido) no requieren programar: se hacen desde Configuración.
-
 ## Checklist antes de presentar
 
-1. Abrir `jugar/JUGAR.html` en la computadora que se va a usar, con el proyector conectado.
-2. `F` para pantalla completa. Verificar que se lean las fichas de equipos y las cartas desde el fondo del aula.
-3. `C` > Equipos: elegir los equipos que juegan, nombres y colores. "Nueva partida con estos equipos".
-4. `C` > Datos: cargar el contenido jurídico, si ya está listo.
-5. Probar sonido y volumen (`C` > Presentación).
-6. Jugar dos o tres turnos de prueba, luego `C` > Partida > Reiniciar partida a 0.
-7. Si va lento: Calidad gráfica Media o Baja.
-8. Llevar el archivo en un pendrive como respaldo, y opcionalmente una partida exportada.
+1. Abrir `jugar/JUGAR.html` en la computadora que se va a usar, con el proyector o Zoom.
+2. `F` para pantalla completa. Verificar que las cartas se lean bien en la pantalla compartida.
+3. Probar sonido y volumen (`G` > Ajustes).
+4. Recorrer el guion una vez entero (o con `G` > "Ir a"), y después `G` > Empezar de cero.
+5. Si va lento: Calidad gráfica Media o Baja.
+6. Llevar el archivo en un pendrive como respaldo.
 
-## Cambiar desde Configuración (sin programar)
+## Cambiar los textos
 
-| Qué | Dónde |
+Todos los textos del juego están en un solo archivo: `src/content/guion.js`, en el orden en que aparecen. Después de editar:
+
+```bash
+npm test && npm run build
+```
+
+y abrir de nuevo `jugar/JUGAR.html`.
+
+| Qué | Dónde, en `guion.js` |
 | --- | --- |
-| Equipos que juegan (2 a 6), nombres, colores | Equipos |
-| Valores de las reglas provisorias | Reglas > Aplicar reglas |
-| Título, subtítulo, calidad, sonido, velocidad, leyenda | Presentación |
-| Exportar o importar partida, cargar contenido, borrar todo | Datos |
+| Título y subtítulo | `TITULO`, `SUBTITULO` |
+| Cartel inicial | `TRANSICION` |
+| Celular del principio y del final (batería, precio, tarifa) | `CELULAR`, `CELULAR_FINAL` |
+| Bifurcación y cartel de contrato por adhesión | `BIFURCACION` |
+| Términos que pasan rápido (y cuántos segundos duran) | `TERMINOS` |
+| Números de la ruedita, uno por turno | `GIROS` |
+| Cartel final de la ruedita | `RUEDITA` |
+| Los cuatro autos, sus casillas y su sentencia | `AUTOS` |
+| Textos de las animaciones (alerta, globos, sello) | `ANIMACION` |
+| Cartel de llegada | `LLEGADA` |
+| Cláusulas del juego | `CLAUSULAS` |
 
-## Cargar el contenido jurídico real
+### Un auto
 
-El contenido es un archivo JSON. Se carga en Configuración > Datos > Cargar contenido, queda guardado en el navegador y se puede quitar.
-
-```json
+```js
 {
-  "nombre": "Jurisprudencia de transporte · versión 1",
-  "cartas": [
-    {
-      "id": "p-01",
-      "tipo": "pregunta",
-      "titulo": "Responsabilidad del transportista",
-      "caso": "Nombre del fallo, tribunal, año",
-      "texto": "Consigna que se proyecta en la carta.",
-      "opciones": ["Opción A", "Opción B", "Opción C", "Opción D"],
-      "correcta": 2,
-      "transportes": ["colectivo"]
-    }
-  ]
+  grupo: 'Grupo 1',
+  nombre: 'La pasajera dormida',
+  vehiculo: 'app',            // app, taxi, auto, remis, colectivo, moto
+  color: '#7A4FD8',
+  caso: 'Basado en el fallo Bevilacqua (choque con Cabify)',
+  casillas: [ /* exactamente 4 */ ],
+  sentencia: '$9.000.000 por incapacidad + …',
 }
 ```
 
-| Campo | Obligatorio | Descripción |
+### Una casilla
+
+| Campo | Obligatorio | Qué es |
 | --- | --- | --- |
-| `tipo` | Sí | `pregunta` (4 opciones), `dilema` (2), `apelacion` (2) o `colision` (choque, sin opciones) |
-| `texto` | Sí | Consigna que se proyecta |
-| `opciones` | Sí, salvo `colision` | Entre 2 y 4 textos cortos |
-| `titulo` | No | Título de la carta; si falta, se usa el nombre del tipo |
-| `caso` | No | Línea pequeña sobre la consigna (fallo, tribunal) |
-| `correcta` | No | Índice desde 0. Si está, al marcar una opción se ve si es correcta y se sugiere el veredicto. Los expositores siempre confirman |
-| `transportes` | No | Ids de equipos para los que conviene la carta: `colectivo`, `taxi`, `auto`, `app`, `moto`, `remis`. Si hay cartas para el equipo, se usan primero |
-| `id` | No | Para ubicar la carta al editar |
+| `titulo` | Sí | Título de la carta y del cartelito junto a la casilla |
+| `situacion` | Sí | El caso, en la cara de la carta |
+| `pregunta` | Sí | La pregunta en negrita |
+| `respuesta` | Sí | Lo que aparece al dar vuelta la carta |
+| `anim` | No | Animación antes de la carta: `choque`, `alcance`, `perro`, `tormenta`, `salto`, `amsterdam` (en el tablero), `martillo`, `sello` (en pantalla) |
+| `pista` | No | Línea chica bajo la pregunta |
+| `opciones`, `correctas` | No | Opciones a mostrar. Si hay `opciones`, `correctas` es obligatorio: los índices desde 0 que se marcan como correctos en la respuesta |
+| `subtitulo` | No | Se agrega después de "Casilla N de 4" |
 
-Las cartas de cada tipo se usan en orden y vuelven a empezar al terminarse. El orden queda registrado en la partida, así que deshacer vuelve a mostrar la misma carta.
+Los turnos van auto 1, 2, 3, 4 y se repiten: el auto 1 juega las casillas 1, 5, 9 y 13; el auto 2, las 2, 6, 10 y 14; y así. Las animaciones del tablero están hechas para su casilla (por ejemplo, `alcance` necesita al auto 1 en la casilla 1 justo atrás); moverlas de casilla puede verse raro.
 
-Hay un ejemplo válido en [placeholders/contenido-ejemplo.json](placeholders/contenido-ejemplo.json) (casos ficticios: no proyectar en la presentación real).
+`GIROS` tiene que tener 16 números del 1 al 10, sin repetir el mismo dos veces seguidas. No cambian nada (cada auto siempre va a su casilla siguiente): solo tienen que parecer al azar. `npm test` lo verifica.
 
 ## Cambiar el código
 
-Todas las rutas son relativas a `src/`. Después de cualquier cambio: `npm test` y `npm run build`.
+Rutas relativas a `src/`. Ver [TECH.md](TECH.md) para la arquitectura.
 
 | Qué | Dónde |
 | --- | --- |
-| Valores por defecto de las reglas | `engine/rules.js` → `DEFAULT_RULES` |
-| Qué hace cada casilla | `engine/reducer.js` → `land()` |
-| Orden y cantidad de casillas, cruces, largo de la ruta | `engine/board.js` → `SEGMENTS`, `CRUCES`, `LANE_LENGTH` |
-| Quién se cruza con quién en cada rotonda | `engine/board.js` → `LEVEL_GROUPS` (y la tabla de `docs/DESIGN.md`) |
-| Equipos por defecto (nombre, color, ruta) | `engine/roster.js` |
-| Colores de casillas e identidad | `scene/palette.js` y `styles.css` (`:root`) |
-| Forma de las rutas (columnas, alturas de los cruces, curvas) | `scene/layout.js` → `COLS`, `Z_LEVELS`, `MIN_SPACING`, `MAX_ZIG`, `FILLET_RADIUS`, `warp()` |
-| Rutas, casillas, rotondas, Meta, río, puentes, cartel | `scene/roads.js` |
-| Monumentos y nombres de barrios | `scene/landmarks.js` → `LANDMARKS` (barrio, monumento, posición aproximada) |
-| Fondo impreso (regiones de color, plaza, viñeta) | `scene/printed.js` |
-| Montañas, edificios, árboles, semáforos | `scene/board.js` |
-| Vehículos | `scene/vehicles.js` → `BUILDERS` |
-| Textos de cartas genéricas | `content/deck.js` → `GENERIC` |
-| Atajos de teclado | `main.js` → `onKey()` |
+| Orden de los pasos del guion | `engine/flow.js` |
+| Forma del camino, casillas, bifurcación | `scene/layout.js` (lo verifica `tests/layout.test.mjs`) |
+| Animaciones del tablero y de la bifurcación | `scene/fx.js` |
+| Cámara, autos, ruedita | `scene/stage.js` |
+| Cartas | `ui/cards.js` |
+| Celular, bifurcación, términos, llegada, sentencias | `ui/scenes.js` |
+| Lluvia, globos, martillo, sello | `ui/effects.js` |
+| Barra superior, equipos, nombres sobre los autos | `ui/hud.js` |
+| Menú y aviso de "Continuar" | `ui/menu.js` |
 | Sonidos | `ui/sound.js` |
+| Atajos de teclado | `main.js` → `onKey()` |
+| Colores e identidad | `styles.css` (`:root`) y `scene/palette.js` |
+| Monumentos y barrios | `scene/landmarks.js` |
 
-### Reglas al cambiar el motor
-
-- El reductor debe seguir siendo puro: nada de `Math.random()` ni de fechas adentro. Lo aleatorio se decide antes y viaja en la acción (como `SPIN.value`).
-- Si cambiás `board.js` (casillas, cruces, largo, rotondas), las partidas guardadas dejan de tener sentido: subí `SESSION_VERSION` en `engine/session.js`.
-- Si tocás la forma de las rutas en `layout.js`, corré `npm test`: `tests/layout.test.mjs` avisa si dos rutas se tocan fuera de una rotonda o si una ruta pisa la ruleta.
-- Agregar un tipo de casilla: estilo en `scene/palette.js`, efecto en `reducer.js`, texto en `ui/hud.js` → `effectText()`, nombre en `board.js` → `SQUARE_TYPES`.
-
-## Recuperar una partida en vivo
-
-Ver también [ATAJOS.md](ATAJOS.md#si-algo-sale-mal).
-
-- Todo lo que pasó está en Configuración > Partida > Historial, con una línea por acción.
-- "Ir aquí" vuelve a ese punto sin borrar lo posterior: se puede volver adelante con Rehacer o con "Ir aquí" en una fila gris, hasta que se juegue algo nuevo.
-- "Ir a la jugada número N" deja la partida justo después del giro N (con la carta o el choque de ese giro ya resueltos, si lo estaban).
-- El ajuste manual queda registrado y se puede deshacer.
+Si cambia la cantidad de pasos del guion, subí la versión de `STORAGE_KEY` en `engine/store.js` para que no se retome una partida vieja.
 
 ## Problemas conocidos
 
-- Mover `JUGAR.html` de carpeta puede hacer que el navegador no encuentre la partida guardada (sobre todo en Safari). Solución: Exportar antes, Importar después.
-- Algunos navegadores bloquean el sonido hasta el primer clic o tecla: la pantalla de inicio se encarga de eso.
+- Mover `JUGAR.html` de carpeta puede hacer que el navegador no encuentre dónde quedó (sobre todo en Safari). Se retoma con `G` > "Ir a".
 - Sin WebGL (computadoras muy viejas o con aceleración desactivada) el tablero no arranca y se muestra un aviso.

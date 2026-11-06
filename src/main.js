@@ -1,16 +1,21 @@
-import { DECK_STORAGE_KEY, validateDeck } from './content/deck.js';
-import { SQUARE_TYPES } from './engine/board.js';
-import { newSessionData, Session } from './engine/session.js';
-import { SQUARE_STYLE } from './scene/palette.js';
+import { AUTOS, GIROS, casilla } from './content/guion.js';
+import { FORK, turnInfo } from './engine/flow.js';
+import { Store } from './engine/store.js';
+import { forkAceptar, forkLeer, forkNegociar, playMove } from './scene/fx.js';
+import { DESTINO_POS, MAIN, destinoSlot, queueSlot, squareS } from './scene/layout.js';
 import { Stage } from './scene/stage.js';
 import { Cards } from './ui/cards.js';
-import { ConfigDrawer } from './ui/config.js';
-import { download, pickFile } from './ui/dom.js';
+import { Effects } from './ui/effects.js';
 import { Hud } from './ui/hud.js';
-import { Splash, Winner } from './ui/overlays.js';
+import { Menu, Resume } from './ui/menu.js';
+import { Finale, Fork, Phone, Transition } from './ui/scenes.js';
 import { Sound } from './ui/sound.js';
 
-const LAND_SOUND = { multa: 'penalty', bonus: 'bonus', control: 'penalty' };
+// Phases shown full screen, without the board HUD.
+const PRE = ['transicion', 'celular', 'celular2', 'clausulas'];
+
+// Halfway between the house and the last parked car.
+const ARRIVAL = DESTINO_POS.clone().lerp(MAIN.at(destinoSlot(0)).p, 0.5);
 
 function safeStorage() {
   try {
@@ -23,262 +28,291 @@ function safeStorage() {
   }
 }
 
+// The director: every click moves the script one step (store), plays the
+// animation between the two steps, then makes the screen match the new step.
+// Going back or jumping skips the animation and redraws the step directly.
 class App {
   constructor() {
     this.root = document.getElementById('app');
-    this.storage = safeStorage();
-    this.session = Session.load(this.storage);
-    this.deck = this.loadStoredDeck();
+    this.store = Store.load(safeStorage());
     this.sound = new Sound();
     this.busy = false;
-    this.started = false;
+    this.after = null;
   }
 
   async init() {
     await Promise.all(['400', '700', '900', 'italic 400', 'italic 700'].map((w) => document.fonts.load(`${w} 32px Bitter`))).catch(() => {});
-    const settings = this.session.data.settings;
-    this.sound.set({ enabled: settings.sonido, volume: settings.volumen });
+    const s = this.store.settings;
+    this.sound.set({ enabled: s.sonido, volume: s.volumen });
 
-    this.stage = new Stage(document.getElementById('stage'), { quality: settings.calidad, onSpinTick: () => this.sound.tick() });
-    await this.stage.init(this.session.data.roster);
-    this.stage.setSpeed(settings.velocidad);
-    this.stage.snap(this.session.state);
+    this.stage = new Stage(document.getElementById('stage'), { quality: s.calidad, onSpinTick: () => this.sound.tick() });
+    await this.stage.init();
+    this.stage.setSpeed(s.velocidad);
 
     this.hud = new Hud(this.root, this);
+    this.effects = new Effects(this.root, this);
+    this.transition = new Transition(this.root);
+    this.fork = new Fork(this.root, this);
+    this.finale = new Finale(this.root, this);
     this.cards = new Cards(this.root, this);
-    this.winner = new Winner(this.root, this);
-    this.config = new ConfigDrawer(this.root, this);
-    this.splash = new Splash(this.root, this);
-    this.hud.render(this.session.state);
-    this.splash.render();
-    this.root.classList.add('pre');
-    this.stage.view('intro', 0.4);
+    this.phone = new Phone(this.root, this);
+    this.menu = new Menu(this.root, this);
+    this.resume = new Resume(this.root, this);
+    this.stage.onFrame = () => {
+      this.hud.updateTags();
+      this.effects.update();
+    };
+    // What the board animations may ask of the HTML layer.
+    this.ui = {
+      storm: (on) => this.effects.storm(on),
+      lightning: () => this.effects.lightning(),
+      bubble: (kind, pos, seconds) => this.effects.bubble(kind, pos, seconds),
+      adhesion: () => this.fork.adhesion(),
+      terms: () => this.fork.terms(),
+    };
+
+    const state = this.store.state;
+    this.stage.snap(state);
+    this.show(state);
+    if (state.phase !== 'transicion') this.resume.show(state);
 
     window.addEventListener('keydown', (e) => this.onKey(e));
-    document.addEventListener('pointerdown', () => this.sound.wake(), { once: false });
+    document.addEventListener('pointerdown', () => this.sound.wake());
+    document.getElementById('stage').addEventListener('click', () => {
+      if (!this.busy && this.store.state.phase !== 'bifurcacion') this.next();
+    });
   }
 
-  name(id) {
-    return this.session.data.roster.find((t) => t.id === id)?.nombre || id;
+  // ---------------------------------------------------------------- actions
+
+  next() {
+    if (this.resume.isOpen()) return this.resume.hide();
+    if (this.busy) return this.skip();
+    const phase = this.store.state.phase;
+    if (phase === 'bifurcacion' || phase === 'clausulas') return;
+    const r = this.store.next();
+    if (r) this.run(r);
   }
 
-  color(id) {
-    return this.session.data.roster.find((t) => t.id === id)?.color;
+  choose(choice) {
+    if (this.busy || this.resume.isOpen() || this.store.state.phase !== 'bifurcacion') return;
+    const r = this.store.choose(choice);
+    if (r) this.run(r, choice);
   }
 
-  start({ restart = false } = {}) {
-    this.sound.wake();
-    if (restart) this.session.restart();
-    this.started = true;
-    this.splash.hide();
-    this.root.classList.remove('pre');
-    this.stage.snap(this.session.state);
-    this.stage.view('overview', 0.9);
-    this.sound.whoosh();
-    this.afterState(this.session.state);
+  back() {
+    if (this.busy) return this.finishThen(() => this.back());
+    const r = this.store.back();
+    if (r) this.redraw(r.next);
   }
 
-  // ---- actions ----
-
-  async act(action) {
-    if (this.busy) return;
-    const { prev, next, applied } = this.session.dispatch(action);
-    if (!applied) return;
-    this.cards.close();
-    this.busy = true;
-    this.hud.renderTurn(prev, this.session.data.roster, true);
-    try {
-      await this.play(prev, next, action);
-    } finally {
-      this.busy = false;
-    }
-    this.afterState(this.session.state);
+  jump(state) {
+    if (this.busy) return this.finishThen(() => this.jump(state));
+    const r = this.store.jump(state);
+    if (r) this.redraw(r.next);
   }
 
-  spin() {
-    const st = this.session.state;
-    if (st.phase !== 'spin') return;
-    const value = 1 + Math.floor(Math.random() * st.rules.spinnerMax);
-    this.act({ type: 'SPIN', value });
+  restart() {
+    if (this.busy) return this.finishThen(() => this.restart());
+    this.store.restart();
+    this.redraw(this.store.state);
   }
 
-  verdict(result) {
-    if (this.session.state.phase === 'card') this.act({ type: 'VERDICT', result });
-  }
-
-  collision(winner) {
-    if (this.session.state.phase === 'collision') this.act({ type: 'COLLISION', winner });
-  }
-
-  // Undo / jump / restart: no animation, everything snaps to the replayed state.
-  rewind(fn) {
+  // Space during an animation: a sign or the terms scroll is cut short on its
+  // own (the last line of the terms still shows); anything else finishes the step.
+  skip() {
+    if (this.fork.skip()) return;
     this.stage.skipAnimations();
-    fn();
-    this.cards.close();
-    this.winner.close();
-    this.hud.clearToasts();
-    this.stage.snap(this.session.state);
-    this.stage.view('overview');
-    this.afterState(this.session.state);
   }
 
-  newGame(roster) {
-    this.rewind(() => this.session.restart({ roster }));
-    this.stage.setRoster(roster);
-    this.stage.recolor(roster);
-    this.stage.snap(this.session.state);
-    this.splash.render();
-    this.hud.toast('Nueva partida');
+  finishThen(fn) {
+    this.after = fn;
+    this.fork.skip();
+    this.stage.skipAnimations();
   }
 
-  factoryReset() {
-    const fresh = newSessionData();
-    this.session.data = fresh;
-    this.rewind(() => this.session.restart({ roster: fresh.roster, rules: fresh.rules }));
-    this.stage.setRoster(fresh.roster);
-    this.stage.recolor(fresh.roster);
-    this.stage.snap(this.session.state);
-    this.clearDeck();
-    this.updateSettings(fresh.settings);
+  async run({ prev, next }, choice) {
+    this.busy = true;
+    this.root.classList.add('busy');
+    try {
+      await this.play(prev, next, choice);
+    } catch (err) {
+      console.error(err);
+    }
+    this.stage.endSkip();
+    this.busy = false;
+    this.root.classList.remove('busy');
+    if (!(next.phase === 'turno' && next.step !== 'listo')) this.stage.snap(next);
+    this.show(next);
+    if (this.after) {
+      const fn = this.after;
+      this.after = null;
+      fn();
+    }
   }
 
-  afterState(state) {
+  redraw(state) {
+    this.fork.closeAll();
+    this.effects.clear();
+    this.stage.snap(state);
+    this.show(state);
+  }
+
+  // ---------------------------------------------------------------- screen
+
+  // Make every overlay and the camera match a step. Safe to call repeatedly.
+  show(state) {
+    const p = state.phase;
+    this.root.classList.toggle('pre', PRE.includes(p));
+    this.transition.show(p === 'transicion');
+    if (p === 'celular') this.phone.show('inicio');
+    else if (p === 'celular2' || p === 'clausulas') this.phone.show('final', { clauses: p === 'clausulas' });
+    else this.phone.hide();
+    this.fork.show(p === 'bifurcacion' ? state : null);
+    this.finale.arrival(p === 'llegada');
+    this.finale.sentencias(p === 'sentencias' ? state.shown : 0);
+    this.finale.ruedita(p === 'ruedita');
+    if (p === 'turno' && state.step !== 'listo') this.cards.show(state.turn, state.step);
+    else this.cards.close();
     this.hud.render(state);
-    this.config.refresh();
-    if (!this.started) return;
-    this.stage.setActive(state.phase === 'finished' ? null : state.teams[state.turn]?.id);
-    const focus = state.pending?.team || state.pending?.teams?.[0];
-    if (focus && this.stage.piecePosition(focus)) this.stage.frameAbove(this.stage.piecePosition(focus));
-    if (state.phase === 'card') this.cards.openQuestion(state);
-    else if (state.phase === 'collision') this.cards.openCollision(state);
-    else if (state.phase === 'finished' && state.winner && !this.winner.isOpen()) this.winner.open(state);
-  }
 
-  // ---- animation director ----
-
-  async play(prev, next, action) {
     const st = this.stage;
-    const events = next.events;
-
-    if (action.type === 'SET_POS' || action.type === 'SET_TURN' || action.type === 'RULES' || action.type === 'PASS') {
-      for (const ev of events) {
-        if (ev.type === 'skipped') this.hud.toast(`${this.name(ev.team)} pierde este turno`, 'var(--coral)');
-      }
-      await st.settle(next);
-      if (action.type !== 'RULES') st.view('overview');
-      return;
-    }
-
-    for (const ev of events) {
-      switch (ev.type) {
-        case 'spin': {
-          this.sound.whoosh();
-          await st.wait(0.35);
-          await st.spin(ev.value);
-          this.sound.bonus();
-          this.hud.showSpin(ev.value, this.name(ev.team));
-          await st.wait(0.9);
-          break;
-        }
-        case 'move': {
-          await st.wait(0.15);
-          await st.walk(ev.team, ev.path, next, () => this.sound.hop());
-          this.hud.renderTeams(next, this.session.data.roster);
-          break;
-        }
-        case 'land': {
-          const label = SQUARE_TYPES[ev.square].label;
-          if (ev.square !== 'libre' && ev.square !== 'cruce') {
-            this.hud.toast(`${this.name(ev.team)} cae en ${label}`, SQUARE_STYLE[ev.square].color);
-          }
-          if (LAND_SOUND[ev.square]) this.sound[LAND_SOUND[ev.square]]();
-          await st.wait(0.35);
-          break;
-        }
-        case 'shift': {
-          const back = ev.to < ev.from;
-          const why = ev.reason === 'multa' ? 'Multa' : ev.reason === 'colision' ? 'Choque' : back ? 'Retrocede' : 'Avanza';
-          this.hud.toast(`${why}: ${this.name(ev.team)} ${back ? 'retrocede' : 'avanza'} ${Math.abs(ev.to - ev.from)}`, back ? 'var(--coral)' : 'var(--green)');
-          await st.slide(ev.team, next);
-          break;
-        }
-        case 'collision': {
-          this.sound.crash();
-          this.hud.toast(`¡Choque en el cruce! ${ev.teams.map((id) => this.name(id)).join(' vs ')}`, 'var(--coral)', 3200);
-          await st.settle(next);
-          await st.crash(ev.cruce, ev.teams);
-          await st.wait(0.4);
-          break;
-        }
-        case 'verdict':
-          ev.result === 'ok' ? this.sound.good() : ev.result === 'fail' ? this.sound.bad() : null;
-          break;
-        case 'collisionVerdict':
-          if (ev.winner) this.hud.toast(`Prevalece ${this.name(ev.winner)}`, this.color(ev.winner));
-          else this.hud.toast('Sin responsable: nadie es penalizado');
-          break;
-        case 'extraSpin':
-          this.hud.toast(`Bonus: ${this.name(ev.team)} gira otra vez`, 'var(--green)');
-          break;
-        case 'skipNext':
-          this.hud.toast(`${this.name(ev.team)} pierde ${ev.n > 1 ? `${ev.n} turnos` : 'su próximo turno'}`, 'var(--coral)');
-          break;
-        case 'skipped':
-          this.hud.toast(`${this.name(ev.team)} pierde este turno`, 'var(--coral)');
-          break;
-        case 'finish':
-          this.sound.fanfare();
-          this.hud.toast(`${this.name(ev.team)} llega a la Meta`, 'var(--gold)', 3500);
-          await st.celebrate(ev.team);
-          break;
-        case 'turn':
-          await st.settle(next);
-          await st.wait(0.2);
-          st.view('overview', 1.4);
-          break;
-        default:
-      }
-    }
-    await st.settle(next);
+    if (PRE.includes(p)) st.view('intro', 1.2);
+    else if (p === 'bifurcacion') st.view('fork');
+    else if (p === 'turno') {
+      if (state.step === 'listo') st.view('overview', 1.4);
+      else st.frameCard(st.pieces[turnInfo(state.turn).car].position);
+    } else if (p === 'llegada') st.focusPoint(ARRIVAL, { dist: 12, height: 11 });
+    else if (p === 'ruedita') st.view('spinner');
+    else st.view('overview');
   }
 
-  // ---- commands & keyboard ----
+  // ---------------------------------------------------------------- animations
 
-  command(name) {
-    switch (name) {
-      case 'undo':
-        if (this.session.canUndo()) this.rewind(() => this.session.undo());
-        break;
-      case 'redo':
-        if (this.session.canRedo()) this.rewind(() => this.session.redo());
-        break;
-      case 'overview':
-        this.stage.view('overview');
-        break;
-      case 'legend':
-        this.updateSettings({ leyenda: !this.session.data.settings.leyenda });
-        break;
-      case 'sound':
-        this.sound.wake();
-        this.updateSettings({ sonido: !this.session.data.settings.sonido });
-        break;
-      case 'full':
-        if (document.fullscreenElement) document.exitFullscreen?.();
-        else document.documentElement.requestFullscreen?.().catch(() => {});
-        break;
-      case 'config':
-        this.config.toggle();
-        break;
+  async play(prev, next, choice) {
+    const st = this.stage;
+    switch (prev.phase) {
+      case 'transicion':
+        this.transition.show(false);
+        this.sound.whoosh();
+        await st.wait(0.35);
+        return;
+      case 'celular':
+        await this.phone.accept();
+        this.root.classList.remove('pre');
+        st.view('salida', 1.4);
+        await st.wait(0.5);
+        await st.appear(() => this.sound.pop());
+        st.view('fork', 1.2);
+        await st.wait(0.5);
+        return;
+      case 'bifurcacion':
+        this.fork.hide();
+        st.view(choice === 'negociar' ? 'barrier' : 'fork', 1.4);
+        if (choice === 'negociar') await forkNegociar(st, { sound: this.sound, ui: this.ui });
+        else if (choice === 'leer') await forkLeer(st, { ui: this.ui });
+        else await forkAceptar(st);
+        if (next.phase === 'turno') {
+          st.view('overview', 1.2);
+          await st.wait(0.6);
+        }
+        return;
+      case 'turno':
+        if (prev.step === 'listo') return this.playTurn(prev.turn);
+        if (prev.step === 'pregunta') return this.cards.show(prev.turn, 'respuesta');
+        this.cards.close();
+        this.effects.clear();
+        st.tidy();
+        if (next.phase === 'llegada') {
+          st.setActive(null);
+          st.focusPoint(ARRIVAL, { dist: 12, height: 11, rate: 1.4 });
+          await st.arrive();
+          this.finale.arrival(true, { fanfare: true });
+          await st.wait(0.8);
+        }
+        return;
+      case 'llegada':
+      case 'sentencias':
+        if (next.phase === 'sentencias') {
+          this.finale.arrival(false);
+          this.finale.sentencias(next.shown, { animate: true });
+          await st.wait(1.3);
+        } else {
+          this.finale.sentencias(0);
+          st.view('spinner');
+          await st.wait(0.7);
+        }
+        return;
+      case 'ruedita':
+        this.finale.ruedita(false);
+        st.view('intro', 1.2);
+        await st.wait(0.6);
+        return;
+      case 'celular2':
+        this.phone.showClauses();
+        await st.wait(0.6);
+        return;
       default:
     }
   }
 
-  primary() {
-    if (this.splash.isOpen()) return this.start();
-    if (this.busy) return this.stage.skipAnimations();
-    if (this.winner.isOpen()) return this.winner.close();
-    const st = this.session.state;
-    if (st.phase === 'spin') this.spin();
+  // Spin (rigged), drive with the square's animation, reveal the plaque, open the card.
+  async playTurn(t) {
+    const st = this.stage;
+    const { car, square } = turnInfo(t);
+    const c = casilla(t);
+    this.effects.clear();
+    st.tidy();
+    st.setActive(car);
+    st.view('spinner', 2.0);
+    await st.wait(0.7);
+    this.sound.whoosh();
+    await st.spin(GIROS[t]);
+    this.sound.bonus();
+    this.hud.showSpin(GIROS[t], AUTOS[car].grupo);
+    await st.wait(1.0);
+    st.follow(car, { dist: 11, height: 10.5, rate: 1.6 });
+    const fromS = st.at[car]?.s ?? queueSlot(car);
+    await playMove(st, c.anim, { car, fromS, toS: squareS(square), sound: this.sound, ui: this.ui });
+    if (c.anim === 'martillo' || c.anim === 'sello') {
+      st.focusPoint(st.pieces[car].position, { dist: 10, height: 9 });
+      await (c.anim === 'martillo' ? this.effects.gavel() : this.effects.stamp());
+    }
+    await st.popPlaque(square);
+    await st.wait(0.3);
+    st.frameCard(st.pieces[car].position);
+    this.cards.show(t, 'pregunta');
+  }
+
+  // ---------------------------------------------------------------- commands
+
+  command(name) {
+    switch (name) {
+      case 'back':
+        return this.back();
+      case 'overview':
+        return this.stage.view('overview');
+      case 'sound':
+        this.sound.wake();
+        return this.updateSettings({ sonido: !this.store.settings.sonido });
+      case 'full':
+        if (document.fullscreenElement) document.exitFullscreen?.();
+        else document.documentElement.requestFullscreen?.().catch(() => {});
+        return;
+      case 'menu':
+        return this.menu.toggle();
+      default:
+    }
+  }
+
+  updateSettings(patch) {
+    const before = this.store.settings.calidad;
+    this.store.updateSettings(patch);
+    const s = this.store.settings;
+    this.sound.set({ enabled: s.sonido, volume: s.volumen });
+    this.stage.setSpeed(s.velocidad);
+    if (s.calidad !== before) return location.reload();
+    this.hud.render(this.store.state);
   }
 
   onKey(e) {
@@ -290,117 +324,33 @@ class App {
     if (e.metaKey || e.ctrlKey || e.altKey) return;
     this.sound.wake();
     const k = e.key;
-
     if (k === 'Escape') {
-      if (this.config.isOpen()) this.config.close();
-      else if (this.winner.isOpen()) this.winner.close();
+      if (this.menu.isOpen()) this.menu.close();
+      else if (this.resume.isOpen()) this.resume.hide();
       return;
     }
-    if (k === 'c' || k === 'C') return this.command('config');
-    if (this.config.isOpen()) return;
+    if (k === 'g' || k === 'G') return this.menu.toggle();
+    if (this.menu.isOpen()) return;
 
     if (k === ' ' || k === 'ArrowRight' || k === 'PageDown' || k === 'Enter') {
       e.preventDefault();
-      if (!this.busy && this.cards.isOpen() && this.cards.key(e)) return;
-      if (this.cards.isOpen() && !this.busy) return;
-      return this.primary();
+      return this.next();
     }
-    if (this.splash.isOpen() || this.busy) return;
-    if (this.cards.isOpen() && this.cards.key(e)) return;
-
+    if (k === 'ArrowLeft' || k === 'PageUp' || k === 'Backspace') {
+      e.preventDefault();
+      if (this.resume.isOpen()) return;
+      return this.back();
+    }
+    if (/^[1-3]$/.test(k)) return this.choose(FORK[Number(k) - 1]);
     switch (k.toLowerCase()) {
-      case 'z':
-        return this.command(e.shiftKey ? 'redo' : 'undo');
-      case 'y':
-        return this.command('redo');
       case 'v':
         return this.command('overview');
-      case 'l':
-        return this.command('legend');
       case 'm':
         return this.command('sound');
       case 'f':
         return this.command('full');
       default:
     }
-    if (/^[1-6]$/.test(k) && !this.cards.isOpen()) {
-      const t = this.session.state.teams[Number(k) - 1];
-      if (t) this.stage.follow(t.id, { rate: 1.8 });
-    }
-  }
-
-  // ---- settings & data ----
-
-  updateSettings(patch, { quiet = false } = {}) {
-    const before = this.session.data.settings.calidad;
-    this.session.updateSettings(patch);
-    const s = this.session.data.settings;
-    this.sound.set({ enabled: s.sonido, volume: s.volumen });
-    this.stage.setSpeed(s.velocidad);
-    if (s.calidad !== before) {
-      location.reload();
-      return;
-    }
-    this.hud.render(this.session.state);
-    if (!quiet) this.config.refresh();
-    this.splash.render();
-  }
-
-  updateTeam(id, patch) {
-    this.session.updateRosterCosmetics(id, patch);
-    if (patch.color) this.stage.recolor(this.session.data.roster);
-    this.hud.render(this.session.state);
-  }
-
-  exportSession() {
-    const d = new Date();
-    const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}_${String(d.getHours()).padStart(2, '0')}${String(d.getMinutes()).padStart(2, '0')}`;
-    download(`partida_${stamp}.json`, this.session.exportJSON());
-  }
-
-  async importSession() {
-    const text = await pickFile();
-    if (!text) return;
-    try {
-      this.rewind(() => this.session.importJSON(text));
-      this.stage.setRoster(this.session.data.roster);
-      this.stage.recolor(this.session.data.roster);
-      this.stage.snap(this.session.state);
-      this.hud.toast('Partida importada');
-    } catch (err) {
-      this.hud.toast(`No se pudo importar: ${err.message}`, 'var(--coral)', 4000);
-    }
-  }
-
-  loadStoredDeck() {
-    try {
-      const raw = this.storage?.getItem(DECK_STORAGE_KEY);
-      return raw ? JSON.parse(raw) : null;
-    } catch {
-      return null;
-    }
-  }
-
-  async loadDeck() {
-    const text = await pickFile();
-    if (!text) return;
-    try {
-      const deck = JSON.parse(text);
-      const err = validateDeck(deck);
-      if (err) throw new Error(err);
-      this.deck = deck;
-      this.storage?.setItem(DECK_STORAGE_KEY, JSON.stringify(deck));
-      this.hud.toast(`Contenido cargado: ${deck.cartas.length} cartas`);
-    } catch (err) {
-      this.hud.toast(`Contenido inválido: ${err.message}`, 'var(--coral)', 4500);
-    }
-    this.config.refresh();
-  }
-
-  clearDeck() {
-    this.deck = null;
-    this.storage?.removeItem(DECK_STORAGE_KEY);
-    this.config?.refresh();
   }
 }
 

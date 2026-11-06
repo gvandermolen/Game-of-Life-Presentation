@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { BOARD } from './layout.js';
 import { UBA } from './palette.js';
-import { COURT_PLAZA } from './space.js';
+import { FACULTAD } from './space.js';
 import { canvas, makeNoise } from './textures.js';
 
 // The printed cardboard underneath everything: soft coloured regions, paper
@@ -74,8 +74,8 @@ function paintRegions(ctx) {
   ctx.restore();
 }
 
-function paintCourtPlaza(ctx) {
-  const { x0, x1, z0, z1 } = COURT_PLAZA;
+function paintFacultadPlaza(ctx) {
+  const { x0, x1, z0, z1 } = FACULTAD;
   ctx.save();
   ctx.fillStyle = '#E8DDC5';
   ctx.beginPath();
@@ -150,7 +150,7 @@ export class PrintedBoard {
     const ppu = quality === 'bajo' ? 24 : 40;
     const { c, ctx } = worldCanvas(ppu);
     paintRegions(ctx);
-    paintCourtPlaza(ctx);
+    paintFacultadPlaza(ctx);
     paintAge(ctx);
     paintBorder(ctx);
     this.map = new THREE.CanvasTexture(c);
