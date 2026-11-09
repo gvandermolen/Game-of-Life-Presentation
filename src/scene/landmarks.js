@@ -1,9 +1,14 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { UBA } from './palette.js';
-import { ROAD_WIDTH, distanceToRoads } from './layout.js';
-import { RIVER_WIDTH, isFree, riverDistance } from './space.js';
+import { ROAD_WIDTH } from './layout.js';
+import { RIVER_WIDTH, riverDistance } from './space.js';
 import { textAt, textWidth } from './text3d.js';
+
+// The world being furnished (its roads decide what is free).
+let space = null;
+const isFree = (...args) => space.isFree(...args);
+const distanceToRoads = (x, z) => space.distanceToRoads(x, z);
 
 // One landmark per neighbourhood, placed roughly where the barrio sits on a real
 // map of Buenos Aires: north (Núñez, Palermo, Recoleta, Retiro) towards the
@@ -392,7 +397,8 @@ function labelSpots(cx, cz, w) {
   return out;
 }
 
-export function buildLandmarks(group, spots) {
+export function buildLandmarks(group, spots, world) {
+  space = world;
   mats();
   const labels = [];
   for (const L of LANDMARKS) {

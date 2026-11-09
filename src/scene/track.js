@@ -1,30 +1,35 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { AUTOS, BIFURCACION, SUBTITULO } from '../content/guion.js';
-import { CARS, FORK, SQUARES } from '../engine/flow.js';
+import { AUTOS, BIFURCACION, SUBTITULO, TEMA, VUELTA } from '../content/guion.js';
+import { CARS, FORK, LANE_POS, LANE_SQUARES, LAP_SQUARES } from '../engine/flow.js';
+import { drawTopic } from '../ui/topics.js';
+import { CONTENT_AT, LAP, LAP_FLAG_POS, LAP_TILE, LAP_ZONES, lapS, lapZoneRange, zoneSignAt } from './lap.js';
 import {
   BARRIER_S,
   BRANCHES,
+  DESTINO_LABEL,
+  DESTINO_LINE,
   ENTRY,
   GANTRY_Z,
+  INICIO_LINE,
+  LANES,
+  LANES_HALF,
+  LANE_GAP,
+  LANE_TILE,
   MAIN,
-  PATHS,
-  QUEUE_FRONT,
   ROAD_WIDTH,
   SALIDA_POS,
   SALIDA_RADIUS,
-  SQUARE_STEP,
-  TILE,
   ZONES,
+  boardHalf,
   pathCrossingZ,
-  plaqueAt,
-  squareFrame,
+  riverDistance,
   squareS,
   zoneLabelAt,
   zoneRange,
 } from './layout.js';
 import { UBA } from './palette.js';
-import { CARTOUCHE, RIVER, RIVER_WIDTH, riverDistance } from './space.js';
+import { CARTOUCHE, RIVER, RIVER_WIDTH } from './space.js';
 import { fixWinding, textAt, textMesh } from './text3d.js';
 import { canvas, makeNoise, toTexture } from './textures.js';
 
@@ -87,8 +92,9 @@ function curvatures(frames) {
   });
 }
 
-// Flat strip along a list of {p, n} frames. On the inside of a tight bend the
-// edge is pulled in so the ribbon never folds over itself.
+// Flat strip along a list of {p, n} frames. `halfW` is a number or one value
+// per frame. On the inside of a tight bend the edge is pulled in so the ribbon
+// never folds over itself.
 function strip(frames, halfW, y, uvScale = 1, offset = 0) {
   const pos = [];
   const uv = [];
@@ -98,8 +104,9 @@ function strip(frames, halfW, y, uvScale = 1, offset = 0) {
   let s = 0;
   frames.forEach((f, i) => {
     if (i) s += f.p.distanceTo(frames[i - 1].p);
-    const lo = clampSide(offset - halfW, ks[i]);
-    const hi = clampSide(offset + halfW, ks[i]);
+    const h = Array.isArray(halfW) ? halfW[i] : halfW;
+    const lo = clampSide(offset - h, ks[i]);
+    const hi = clampSide(offset + h, ks[i]);
     pos.push(f.p.x + f.n.x * lo, y, f.p.z + f.n.z * lo, f.p.x + f.n.x * hi, y, f.p.z + f.n.z * hi);
     uv.push(s * uvScale, 0, s * uvScale, 1);
     if (i < frames.length - 1) {
@@ -143,18 +150,22 @@ function asphaltTexture() {
   return toTexture(c, { repeat: [1, 1] });
 }
 
-function makeMaterials() {
+let shared = null;
+function materials() {
+  if (shared) return shared;
   const asphaltMap = asphaltTexture();
   asphaltMap.repeat.set(0.5, 1);
-  return {
+  const zones = Object.fromEntries(ZONES.map((z) => [z.id, plastic(z.color, { roughness: 0.42, clearcoat: 0.4 })]));
+  shared = {
     asphalt: new THREE.MeshStandardMaterial({ map: asphaltMap, roughness: 0.82 }),
     line: new THREE.MeshStandardMaterial({ color: '#F4EFE4', roughness: 0.6 }),
     paint: new THREE.MeshStandardMaterial({ color: '#F7F3EA', roughness: 0.55 }),
     navy: plastic(UBA.navy),
     gold: new THREE.MeshPhysicalMaterial({ color: UBA.gold, roughness: 0.35, metalness: 0.35, clearcoat: 0.6 }),
     paper: plastic('#FBF6EA', { roughness: 0.5 }),
+    pass: plastic('#F1EADA', { roughness: 0.4, clearcoat: 0.5 }),
     verge: plastic('#8F877A', { roughness: 0.45, clearcoat: 0.3 }),
-    zones: Object.fromEntries(ZONES.map((z) => [z.id, plastic(z.color, { roughness: 0.42, clearcoat: 0.4 })])),
+    zones,
     ripple: new THREE.MeshStandardMaterial({ color: '#A9D3EE', roughness: 0.3, transparent: true, opacity: 0.55 }),
     water: new THREE.MeshPhysicalMaterial({ color: '#3C86BF', roughness: 0.08, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05 }),
     bank: new THREE.MeshStandardMaterial({ color: '#D9CDA6', roughness: 0.9 }),
@@ -162,47 +173,18 @@ function makeMaterials() {
     steel: new THREE.MeshStandardMaterial({ color: '#B8BEC8', roughness: 0.3, metalness: 0.8 }),
     tiles: AUTOS.map((a) => plastic(a.color, { roughness: 0.32, clearcoat: 0.75 })),
   };
+  return shared;
 }
 
-// ---------------------------------------------------------------- roads
-
-// The board road carries the three zone colours along its verge.
-function vergePieces(path) {
-  if (path !== MAIN) return [[0, path.length, null]];
-  const out = [];
-  let from = 0;
-  for (const z of ZONES) {
-    const [a, b] = zoneRange(z);
-    if (a > from) out.push([from, a, null]);
-    out.push([a, b, z.id]);
-    from = b;
-  }
-  out.push([from, path.length, null]);
-  return out;
-}
-
-function buildRoads(group, M) {
-  PATHS.forEach((path, i) => {
-    const lift = i * LIFT;
-    for (const [s0, s1, zone] of vergePieces(path)) {
-      const frames = path.frames(s0, s1);
-      group.add(flat(strip(frames, ROAD_WIDTH / 2 + 0.2, Y.edge + lift), zone ? M.zones[zone] : M.verge));
-    }
-    const frames = path.frames(0, path.length);
-    group.add(flat(strip(frames, ROAD_WIDTH / 2 + 0.05, Y.line + lift), M.line));
-    group.add(flat(strip(frames, ROAD_WIDTH / 2 - 0.03, Y.asphalt + lift, 0.5), M.asphalt));
-  });
-}
-
-// ---------------------------------------------------------------- squares
+// ---------------------------------------------------------------- shared pieces
 
 // A raised plastic block that bends with the road, chamfered round its top edge.
-function tileGeometry(s, L, halfW) {
+function tileGeometry(path, s, L, halfW) {
   const CH = 0.018;
   const n = Math.max(2, Math.ceil(L / 0.06) + 1);
   const ring = (s0, s1) =>
     Array.from({ length: n }, (_, i) => {
-      const { p, normal } = MAIN.at(s0 + ((s1 - s0) * i) / (n - 1));
+      const { p, normal } = path.at(s0 + ((s1 - s0) * i) / (n - 1));
       return { p, n: normal };
     });
   const base = ring(s - L / 2, s + L / 2);
@@ -245,53 +227,49 @@ function tileGeometry(s, L, halfW) {
 
 // Text baseline across or along the road, whichever reads left to right for the audience.
 function readableBaseline(tangent, normal) {
-  const dir = Math.abs(tangent.x) >= Math.abs(tangent.z) ? tangent : normal;
+  let dir = Math.abs(tangent.x) >= Math.abs(tangent.z) ? tangent : normal;
+  // Left to right as seen from the front of the table, never upside down.
+  if (dir.x < 0) dir = dir.clone().negate();
   return { rot: Math.atan2(dir.z, dir.x), dir };
 }
 
-const INK = AUTOS.map((a) => (a.vehiculo === 'taxi' ? UBA.navy : '#FFFFFF'));
-
-function buildSquares(group, M) {
-  const L = Math.min(TILE.length, SQUARE_STEP - 0.3);
-  for (let k = 1; k <= SQUARES; k++) {
-    const car = (k - 1) % CARS;
-    const tile = shadowed(new THREE.Mesh(tileGeometry(squareS(k), L, TILE.width / 2), M.tiles[car]));
-    group.add(tile);
-
-    const { p, tangent, normal } = squareFrame(k);
-    const { rot, dir } = readableBaseline(tangent, normal);
-    // Below the baseline on screen: towards the audience.
-    let down = new THREE.Vector3(-dir.z, 0, dir.x);
-    if (down.z < 0) down.negate();
-    const ink = INK[car];
-    group.add(textAt(String(k), p.x - down.x * 0.12, p.z - down.z * 0.12, { size: 0.92, weight: 900, color: ink, rot, y: Y.label }));
-    group.add(textAt(AUTOS[car].grupo.toUpperCase(), p.x + down.x * 0.52, p.z + down.z * 0.52, { size: 0.19, weight: 900, color: ink, rot, y: Y.label, spacing: 0.02 }));
+// Coloured verge, white edge line and asphalt along a path. `zoneAt(s0, s1)`
+// splits the verge into coloured stretches; `half(s)` is the road half width.
+function road(group, M, path, { lift = 0, half = () => ROAD_WIDTH / 2, pieces = [[0, path.length, null]], zoneMats = M.zones } = {}) {
+  for (const [s0, s1, zone] of pieces) {
+    const frames = path.frames(s0, s1);
+    const hs = frames.map((_, i) => half(s0 + ((s1 - s0) * i) / (frames.length - 1)) + 0.2);
+    group.add(flat(strip(frames, hs, Y.edge + lift), zone ? zoneMats[zone] : M.verge));
   }
+  const frames = path.frames(0, path.length);
+  const hs = frames.map((_, i) => half((path.length * i) / (frames.length - 1)));
+  group.add(flat(strip(frames, hs.map((h) => h + 0.05), Y.line + lift), M.line));
+  group.add(flat(strip(frames, hs.map((h) => h - 0.03), Y.asphalt + lift, 0.5), M.asphalt));
 }
 
-// Checkered line across the road at arc length s, with a word painted next to it.
-function roadLine(group, M, path, s, word, wordAt) {
+function zonePieces(length, ranges) {
+  const out = [];
+  let from = 0;
+  for (const [a, b, id] of ranges) {
+    if (a > from) out.push([from, a, null]);
+    out.push([a, b, id]);
+    from = b;
+  }
+  if (from < length) out.push([from, length, null]);
+  return out;
+}
+
+// Checkered line across the road at arc length s.
+function checkerLine(group, M, path, s, width, cols = 7) {
   const rows = [s - 0.16, s];
-  const cols = 7;
   rows.forEach((r, ri) => {
     const frames = path.frames(r, r + 0.16, 0.16);
     for (let j = 0; j < cols; j++) {
-      const off = -ROAD_WIDTH / 2 + 0.06 + ((j + 0.5) * (ROAD_WIDTH - 0.12)) / cols;
-      group.add(flat(strip(frames, (ROAD_WIDTH - 0.12) / cols / 2, Y.marks, 1, off), (j + ri) % 2 ? M.navy : M.paint));
+      const off = -width / 2 + 0.06 + ((j + 0.5) * (width - 0.12)) / cols;
+      group.add(flat(strip(frames, (width - 0.12) / cols / 2, Y.marks, 1, off), (j + ri) % 2 ? M.navy : M.paint));
     }
   });
-  const pts = Array.from({ length: 30 }, (_, i) => path.at(wordAt - 1.4 + (2.8 * i) / 29).p);
-  group.add(textMesh(word, { path: pts, size: 0.5, weight: 900, color: '#F7F3EA', y: Y.marks + 0.001, spacing: 0.04 }));
 }
-
-function buildMarks(group, M) {
-  const start = QUEUE_FRONT + 1.05;
-  roadLine(group, M, MAIN, start, 'INICIO', start + 0.75);
-  const end = squareS(SQUARES) + SQUARE_STEP / 2 + 0.35;
-  roadLine(group, M, MAIN, end, 'DESTINO', end + 1.0);
-}
-
-// ---------------------------------------------------------------- salida
 
 function buildSalida(group, M) {
   const { x, z } = SALIDA_POS;
@@ -305,7 +283,159 @@ function buildSalida(group, M) {
   group.add(textAt('SALIDA', x, z + 0.55, { size: 0.3, weight: 900, color: UBA.gold, y: Y.plate + 0.038, spacing: 0.03 }));
 }
 
-// ---------------------------------------------------------------- fork
+function buildRiver(group, M) {
+  const frames = curveFrames(RIVER, 320);
+  group.add(flat(strip(frames, RIVER_WIDTH / 2 + 0.22, Y.bank), M.bank));
+  group.add(flat(strip(frames, RIVER_WIDTH / 2, Y.water), M.water));
+  for (const [off, phase] of [[-0.2, 0], [0.22, 5]]) {
+    for (let i = phase; i < frames.length - 6; i += 11) {
+      group.add(flat(strip(frames.slice(i, i + 4), 0.014, Y.water + 0.002, 1, off), M.ripple));
+    }
+  }
+  const path = RIVER.map((p) => ({ x: p.x, z: p.z }));
+  let s = 0;
+  for (let i = 1; i < path.length; i++) {
+    if (path[i].x > 9) break;
+    s += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
+  }
+  group.add(textMesh('RIACHUELO', { path, at: s, size: 0.46, weight: 700, italic: true, color: '#EAF5FB', y: Y.water + 0.003, spacing: 0.08 }));
+}
+
+function buildBridge(group, M, path) {
+  let best = 0;
+  let bestD = Infinity;
+  for (let i = 0; i <= 400; i++) {
+    const s = (i / 400) * path.length;
+    const { p } = path.at(s);
+    const d = riverDistance(p.x, p.z);
+    if (d < bestD) {
+      bestD = d;
+      best = s;
+    }
+  }
+  if (bestD > 0.4) return;
+  const half = RIVER_WIDTH / 2 + 0.6;
+  for (const side of [-1, 1]) {
+    const pts = [];
+    for (let i = 0; i <= 16; i++) {
+      const { p, normal } = path.at(best - half + (2 * half * i) / 16);
+      pts.push(p.clone().addScaledVector(normal, side * (ROAD_WIDTH / 2 + 0.26)).setY(0.24));
+    }
+    group.add(shadowed(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.045, 8, false), M.rail)));
+    for (let i = 0; i <= 4; i++) {
+      const q = pts[Math.round((i / 4) * 16)];
+      const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.24, 10), M.rail));
+      post.position.set(q.x, 0.12, q.z);
+      group.add(post);
+    }
+    group.add(flat(strip(path.frames(best - half, best + half, 0.08), 0.09, Y.edge + 0.012, 1, side * (ROAD_WIDTH / 2 + 0.26)), M.rail));
+  }
+}
+
+// The title plate in front of the board. Its texture is redrawn when the
+// class name changes in the settings.
+function cartoucheTexture(title) {
+  const { x0, x1, z0, z1 } = CARTOUCHE;
+  const w = x1 - x0;
+  const h = z1 - z0;
+  const ppu = 200;
+  const { c, ctx } = canvas(Math.round(w * ppu), Math.round(h * ppu));
+  ctx.scale(ppu, ppu);
+  ctx.fillStyle = UBA.navy;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, w, h, 0.35);
+  ctx.fill();
+  ctx.strokeStyle = UBA.gold;
+  ctx.lineWidth = 0.09;
+  ctx.beginPath();
+  ctx.roundRect(0.18, 0.18, w - 0.36, h - 0.36, 0.22);
+  ctx.stroke();
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = '#fff';
+  const text = title.toUpperCase();
+  let size = 0.72;
+  ctx.font = `900 ${size * ppu}px ${FONT}`;
+  while (ctx.measureText(text).width > (w - 0.8) * ppu && size > 0.36) {
+    size -= 0.02;
+    ctx.font = `900 ${size * ppu}px ${FONT}`;
+  }
+  ctx.fillText(text, (w / 2) * ppu, 1.0 * ppu);
+  ctx.fillStyle = UBA.goldLight;
+  ctx.font = `900 ${0.46 * ppu}px ${FONT}`;
+  ctx.fillText(TEMA.toUpperCase(), (w / 2) * ppu, 1.78 * ppu, (w - 0.8) * ppu);
+  ctx.fillStyle = UBA.sky;
+  ctx.font = `italic 400 ${0.22 * ppu}px ${FONT}`;
+  ctx.fillText(SUBTITULO, (w / 2) * ppu, 2.6 * ppu, (w - 0.6) * ppu);
+  return toTexture(c, { anisotropy: 16 });
+}
+
+function buildCartouche(group, title) {
+  const { x0, x1, z0, z1 } = CARTOUCHE;
+  const g = new THREE.PlaneGeometry(x1 - x0, z1 - z0);
+  g.rotateX(-Math.PI / 2);
+  g.translate((x0 + x1) / 2, Y.plate, (z0 + z1) / 2);
+  const material = new THREE.MeshPhysicalMaterial({ map: cartoucheTexture(title), transparent: true, roughness: 0.4, clearcoat: 0.6 });
+  group.add(flat(g, material));
+  return (t) => {
+    material.map.dispose();
+    material.map = cartoucheTexture(t);
+    material.needsUpdate = true;
+  };
+}
+
+// River, Salida and title plate: on the board in both worlds.
+export function buildSharedTrack(group, title) {
+  const M = materials();
+  buildRiver(group, M);
+  buildSalida(group, M);
+  return { setTitle: buildCartouche(group, title) };
+}
+
+// ---------------------------------------------------------------- the game
+
+function buildLanes(group, M) {
+  road(group, M, ENTRY);
+  ['negociar', 'leer', 'aceptar'].forEach((k, i) => road(group, M, BRANCHES[k], { lift: (i + 1) * LIFT }));
+  const ranges = ZONES.map((z) => [...zoneRange(z), z.id]);
+  road(group, M, MAIN, { lift: 4 * LIFT, half: boardHalf, pieces: zonePieces(MAIN.length, ranges) });
+  // Dashed lines between the lanes.
+  for (let c = 0; c < CARS - 1; c++) {
+    const off = (c + 1 - CARS / 2) * LANE_GAP;
+    for (let s = INICIO_LINE + 0.4; s < DESTINO_LINE - 0.5; s += 1.1) {
+      group.add(flat(strip(MAIN.frames(s, s + 0.55, 0.1), 0.035, Y.marks - 0.004, 1, off), M.line));
+    }
+  }
+}
+
+const ink = (car) => (AUTOS[car].vehiculo === 'taxi' ? UBA.navy : '#FFFFFF');
+
+function buildLaneSquares(group, M) {
+  for (let c = 0; c < CARS; c++) {
+    const lane = LANES[c];
+    for (let k = 1; k <= LANE_SQUARES; k++) {
+      const card = LANE_POS[c].includes(k);
+      const s = squareS(k);
+      group.add(shadowed(new THREE.Mesh(tileGeometry(lane, s, LANE_TILE.length, LANE_TILE.width / 2), card ? M.tiles[c] : M.pass)));
+      const { p, tangent, normal } = lane.at(s);
+      const { rot } = readableBaseline(tangent, normal);
+      group.add(textAt(String(k), p.x, p.z, { size: card ? 0.74 : 0.5, weight: 900, color: card ? ink(c) : '#8C8272', rot, y: Y.label }));
+    }
+  }
+}
+
+// Inicio and Destino lines across the four lanes. The words are painted
+// beside the board: Inicio by its line, Destino in front of home.
+function buildLaneMarks(group, M) {
+  const width = LANES_HALF * 2;
+  checkerLine(group, M, MAIN, INICIO_LINE, width, 12);
+  checkerLine(group, M, MAIN, DESTINO_LINE, width, 12);
+  const f = MAIN.at(INICIO_LINE);
+  const at = f.p.clone().addScaledVector(f.normal, -(LANES_HALF + 1.0));
+  group.add(textAt('INICIO', at.x, at.z, { size: 0.55, weight: 900, color: '#F7F3EA', y: 0.012, spacing: 0.05 }));
+  group.add(textAt('DESTINO', DESTINO_LABEL.x, DESTINO_LABEL.z, { size: 0.6, weight: 900, color: '#F7F3EA', y: 0.012, spacing: 0.06 }));
+}
 
 function panelTexture(title, n) {
   const W = 1024;
@@ -323,7 +453,6 @@ function panelTexture(title, n) {
   ctx.fillStyle = '#fff';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  // Arrow up the lane, then the two lines of the sign.
   ctx.beginPath();
   ctx.moveTo(110, 110);
   ctx.lineTo(170, 190);
@@ -376,29 +505,6 @@ function buildGantry(group, M) {
   });
 }
 
-// Red and white barrier closing the negotiating road.
-function buildBarrier(group, M) {
-  const { p, tangent, heading } = BRANCHES.negociar.at(BARRIER_S);
-  const g = new THREE.Group();
-  const stripes = new THREE.MeshPhysicalMaterial({ map: stripeTexture(), roughness: 0.4, clearcoat: 0.5 });
-  const w = ROAD_WIDTH + 0.5;
-  // Stripes on the two faces across the road (local ±x once turned to the heading).
-  const board = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.36, w), [stripes, stripes, M.paper, M.paper, M.paper, M.paper]));
-  board.position.y = 0.52;
-  g.add(board);
-  for (const s of [-1, 1]) {
-    const leg = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 0.1, 2, 0.03), M.paper));
-    leg.position.set(0, 0.25, s * (w / 2 - 0.15));
-    g.add(leg);
-    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), new THREE.MeshStandardMaterial({ color: '#ffb300', emissive: '#ff8a00', emissiveIntensity: 1.4 }));
-    lamp.position.set(0, 0.78, s * (w / 2 - 0.15));
-    g.add(lamp);
-  }
-  g.position.set(p.x, 0, p.z).addScaledVector(tangent, 0.05);
-  g.rotation.y = heading;
-  group.add(g);
-}
-
 function stripeTexture() {
   const { c, ctx } = canvas(512, 128);
   ctx.fillStyle = '#fff';
@@ -416,7 +522,27 @@ function stripeTexture() {
   return toTexture(c);
 }
 
-// ---------------------------------------------------------------- zones
+// Red and white barrier closing the negotiating road.
+function buildBarrier(group, M) {
+  const { p, tangent, heading } = BRANCHES.negociar.at(BARRIER_S);
+  const g = new THREE.Group();
+  const stripes = new THREE.MeshPhysicalMaterial({ map: stripeTexture(), roughness: 0.4, clearcoat: 0.5 });
+  const w = ROAD_WIDTH + 0.5;
+  const board = shadowed(new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.36, w), [stripes, stripes, M.paper, M.paper, M.paper, M.paper]));
+  board.position.y = 0.52;
+  g.add(board);
+  for (const s of [-1, 1]) {
+    const leg = shadowed(new THREE.Mesh(new RoundedBoxGeometry(0.1, 0.5, 0.1, 2, 0.03), M.paper));
+    leg.position.set(0, 0.25, s * (w / 2 - 0.15));
+    g.add(leg);
+    const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.07, 14, 10), new THREE.MeshStandardMaterial({ color: '#ffb300', emissive: '#ff8a00', emissiveIntensity: 1.4 }));
+    lamp.position.set(0, 0.78, s * (w / 2 - 0.15));
+    g.add(lamp);
+  }
+  g.position.set(p.x, 0, p.z).addScaledVector(tangent, 0.05);
+  g.rotation.y = heading;
+  group.add(g);
+}
 
 function buildZoneLabels(group) {
   for (const z of ZONES) {
@@ -425,201 +551,180 @@ function buildZoneLabels(group) {
   }
 }
 
-// ---------------------------------------------------------------- title plaques
-
-function plaqueTexture(k, title, color) {
-  const W = 768;
-  const H = 256;
-  const { c, ctx } = canvas(W, H);
-  ctx.fillStyle = '#FBF6EA';
-  ctx.beginPath();
-  ctx.roundRect(0, 0, W, H, 30);
-  ctx.fill();
-  ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.roundRect(0, 0, 150, H, [30, 0, 0, 30]);
-  ctx.fill();
-  ctx.fillStyle = color === '#F2B705' ? UBA.navy : '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.font = `900 100px ${FONT}`;
-  ctx.fillText(String(k), 75, H / 2 + 4);
-  ctx.fillStyle = UBA.navy;
-  ctx.textAlign = 'left';
-  let size = 74;
-  const words = title.split(' ');
-  const lines = [];
-  const fit = () => {
-    lines.length = 0;
-    ctx.font = `900 ${size}px ${FONT}`;
-    let line = '';
-    for (const w of words) {
-      const t = line ? `${line} ${w}` : w;
-      if (ctx.measureText(t).width > W - 200 && line) {
-        lines.push(line);
-        line = w;
-      } else line = t;
-    }
-    lines.push(line);
-  };
-  fit();
-  while (lines.length > 2 && size > 40) {
-    size -= 6;
-    fit();
-  }
-  lines.forEach((l, i) => ctx.fillText(l, 180, H / 2 + (i - (lines.length - 1) / 2) * size * 1.1 + 4));
-  return toTexture(c, { anisotropy: 16 });
-}
-
-function buildPlaques(M) {
-  const group = new THREE.Group();
-  group.userData.dynamic = true;
-  const list = [];
-  const postGeo = new THREE.CylinderGeometry(0.04, 0.05, 0.62, 10);
-  for (let k = 1; k <= SQUARES; k++) {
-    const car = (k - 1) % CARS;
-    const { pos } = plaqueAt(k);
-    const g = new THREE.Group();
-    const post = shadowed(new THREE.Mesh(postGeo, M.steel));
-    post.position.y = 0.31;
-    g.add(post);
-    const w = 2.1;
-    const h = w / 3;
-    const sign = new THREE.Group();
-    const back = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w + 0.05, h + 0.05, 0.05, 2, 0.02), M.steel));
-    sign.add(back);
-    const title = AUTOS[car].casillas[Math.floor((k - 1) / CARS)].titulo;
-    const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: plaqueTexture(k, title, AUTOS[car].color), roughness: 0.5 }));
-    face.position.z = 0.028;
-    sign.add(face);
-    sign.position.y = 0.62 + h / 2;
-    // Leaning back like a lectern, towards the audience.
-    sign.rotation.x = -0.75;
-    g.add(sign);
-    g.position.set(pos.x, 0, pos.z);
-    g.visible = false;
-    g.userData.sign = sign;
-    group.add(g);
-    list.push(g);
-  }
-  return { group, list };
-}
-
-// ---------------------------------------------------------------- river and bridge
-
-function buildRiver(group, M) {
-  const frames = curveFrames(RIVER, 320);
-  group.add(flat(strip(frames, RIVER_WIDTH / 2 + 0.22, Y.bank), M.bank));
-  group.add(flat(strip(frames, RIVER_WIDTH / 2, Y.water), M.water));
-  for (const [off, phase] of [[-0.2, 0], [0.22, 5]]) {
-    for (let i = phase; i < frames.length - 6; i += 11) {
-      group.add(flat(strip(frames.slice(i, i + 4), 0.014, Y.water + 0.002, 1, off), M.ripple));
-    }
-  }
-  const path = RIVER.map((p) => ({ x: p.x, z: p.z }));
-  let s = 0;
-  for (let i = 1; i < path.length; i++) {
-    if (path[i].x > 9) break;
-    s += Math.hypot(path[i].x - path[i - 1].x, path[i].z - path[i - 1].z);
-  }
-  group.add(textMesh('RIACHUELO', { path, at: s, size: 0.46, weight: 700, italic: true, color: '#EAF5FB', y: Y.water + 0.003, spacing: 0.08 }));
-}
-
-function buildBridge(group, M, path) {
-  let best = 0;
-  let bestD = Infinity;
-  for (let i = 0; i <= 400; i++) {
-    const s = (i / 400) * path.length;
-    const { p } = path.at(s);
-    const d = riverDistance(p.x, p.z);
-    if (d < bestD) {
-      bestD = d;
-      best = s;
-    }
-  }
-  if (bestD > 0.4) return;
-  const half = RIVER_WIDTH / 2 + 0.6;
-  for (const side of [-1, 1]) {
-    const pts = [];
-    for (let i = 0; i <= 16; i++) {
-      const { p, normal } = path.at(best - half + (2 * half * i) / 16);
-      pts.push(p.clone().addScaledVector(normal, side * (ROAD_WIDTH / 2 + 0.26)).setY(0.24));
-    }
-    group.add(shadowed(new THREE.Mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 32, 0.045, 8, false), M.rail)));
-    for (let i = 0; i <= 4; i++) {
-      const q = pts[Math.round((i / 4) * 16)];
-      const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.24, 10), M.rail));
-      post.position.set(q.x, 0.12, q.z);
-      group.add(post);
-    }
-    group.add(flat(strip(path.frames(best - half, best + half, 0.08), 0.09, Y.edge + 0.012, 1, side * (ROAD_WIDTH / 2 + 0.26)), M.rail));
-  }
-}
-
-// ---------------------------------------------------------------- cartouche
-
-function buildCartouche(group) {
-  const { x0, x1, z0, z1 } = CARTOUCHE;
-  const w = x1 - x0;
-  const h = z1 - z0;
-  const ppu = 200;
-  const { c, ctx } = canvas(Math.round(w * ppu), Math.round(h * ppu));
-  ctx.scale(ppu, ppu);
-  ctx.fillStyle = UBA.navy;
-  ctx.beginPath();
-  ctx.roundRect(0, 0, w, h, 0.35);
-  ctx.fill();
-  ctx.strokeStyle = UBA.gold;
-  ctx.lineWidth = 0.09;
-  ctx.beginPath();
-  ctx.roundRect(0.18, 0.18, w - 0.36, h - 0.36, 0.22);
-  ctx.stroke();
-  ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillStyle = '#fff';
-  ctx.font = `900 ${0.6 * ppu}px ${FONT}`;
-  ctx.fillText('EL JUEGO DE LOS CONTRATOS', (w / 2) * ppu, 0.92 * ppu, (w - 0.7) * ppu);
-  ctx.fillStyle = UBA.goldLight;
-  ctx.font = `900 ${0.74 * ppu}px ${FONT}`;
-  ctx.fillText('TRANSPORTE', (w / 2) * ppu, 1.75 * ppu);
-  ctx.fillStyle = UBA.sky;
-  ctx.font = `italic 400 ${0.22 * ppu}px ${FONT}`;
-  ctx.fillText(SUBTITULO, (w / 2) * ppu, 2.6 * ppu, (w - 0.6) * ppu);
-  const tex = toTexture(c, { anisotropy: 16 });
-  const g = new THREE.PlaneGeometry(w, h);
-  g.rotateX(-Math.PI / 2);
-  g.translate((x0 + x1) / 2, Y.plate, (z0 + z1) / 2);
-  group.add(flat(g, new THREE.MeshPhysicalMaterial({ map: tex, transparent: true, roughness: 0.4, clearcoat: 0.6 })));
-}
-
-// ---------------------------------------------------------------- public
-
-export function buildTrack() {
-  const group = new THREE.Group();
-  const M = makeMaterials();
-  buildRiver(group, M);
+export function buildGameTrack(group) {
+  const M = materials();
   buildBridge(group, M, ENTRY);
-  buildRoads(group, M);
-  buildSquares(group, M);
-  buildMarks(group, M);
-  buildSalida(group, M);
+  buildLanes(group, M);
+  buildLaneSquares(group, M);
+  buildLaneMarks(group, M);
   buildGantry(group, M);
   buildBarrier(group, M);
   buildZoneLabels(group);
-  buildCartouche(group);
-  const plaques = buildPlaques(M);
-  group.add(plaques.group);
-  return {
-    group,
-    // Show the stage title of the first n squares.
-    reveal(n, animate = false) {
-      plaques.list.forEach((g, i) => {
-        const show = i < n;
-        if (show && !g.visible && animate) g.userData.pop = 0;
-        g.visible = show;
-      });
+}
+
+// ---------------------------------------------------------------- the lap
+
+const LAP_ZONE_OF = (k) => LAP_ZONES.find((z) => k >= z.from && k <= z.to);
+
+function contentTexture(n, color) {
+  const S = 256;
+  const { c, ctx } = canvas(S);
+  ctx.fillStyle = '#FFFFFF';
+  ctx.beginPath();
+  ctx.arc(S / 2, S / 2, S / 2 - 6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.lineWidth = 10;
+  ctx.strokeStyle = UBA.navy;
+  ctx.stroke();
+  drawTopic(ctx, VUELTA[n - 1].icono, S / 2, S * 0.4, S * 0.44, UBA.navy, 2.1);
+  ctx.fillStyle = color;
+  ctx.font = `900 74px ${FONT}`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(String(n), S / 2, S * 0.76);
+  return toTexture(c, { anisotropy: 16 });
+}
+
+function checkerTexture() {
+  const { c, ctx } = canvas(256);
+  for (let i = 0; i < 8; i++) {
+    for (let j = 0; j < 8; j++) {
+      ctx.fillStyle = (i + j) % 2 ? UBA.navy : '#fff';
+      ctx.fillRect(i * 32, j * 32, 32, 32);
+    }
+  }
+  return toTexture(c);
+}
+
+function buildLapSquares(group, M) {
+  const decal = new THREE.PlaneGeometry(1, 1);
+  decal.rotateX(-Math.PI / 2);
+  for (let k = 1; k <= LAP_SQUARES; k++) {
+    const s = lapS(k);
+    const z = LAP_ZONE_OF(k);
+    const n = CONTENT_AT.get(k);
+    const { p, tangent, normal } = LAP.at(s);
+    if (k === LAP_SQUARES) {
+      const tile = shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.content.length, LAP_TILE.content.width / 2), M.paper));
+      group.add(tile);
+      const d = new THREE.Mesh(decal, new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.5 }));
+      d.scale.set(LAP_TILE.content.length - 0.12, 1, LAP_TILE.content.width - 0.12);
+      d.position.set(p.x, Y.label, p.z);
+      d.rotation.y = Math.atan2(-tangent.z, tangent.x);
+      group.add(d);
+      continue;
+    }
+    if (n) {
+      group.add(shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.content.length, LAP_TILE.content.width / 2), M.zones[z.id])));
+      const d = new THREE.Mesh(decal, new THREE.MeshStandardMaterial({ map: contentTexture(n, UBA.navy), transparent: true, roughness: 0.45 }));
+      d.scale.setScalar(1.42);
+      d.position.set(p.x, Y.label, p.z);
+      const { rot } = readableBaseline(tangent, normal);
+      d.rotation.y = -rot;
+      d.renderOrder = 2;
+      group.add(d);
+    } else {
+      group.add(shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.pass.length, LAP_TILE.pass.width / 2), M.pass)));
+      const { rot } = readableBaseline(tangent, normal);
+      group.add(textAt(String(k), p.x, p.z, { size: 0.42, weight: 900, color: '#A39886', rot, y: Y.label }));
+    }
+  }
+  const end = LAP.at(lapS(LAP_SQUARES));
+  const at = end.p.clone().addScaledVector(end.normal, -(ROAD_WIDTH / 2 + 1.1));
+  group.add(textAt('DESTINO', at.x, at.z, { size: 0.55, weight: 900, color: '#F7F3EA', y: 0.012, spacing: 0.05 }));
+}
+
+function zoneSignTexture(z) {
+  const { c, ctx } = canvas(512, 256);
+  ctx.fillStyle = z.color;
+  ctx.beginPath();
+  ctx.roundRect(0, 0, 512, 256, 28);
+  ctx.fill();
+  ctx.strokeStyle = '#fff';
+  ctx.lineWidth = 12;
+  ctx.beginPath();
+  ctx.roundRect(16, 16, 480, 224, 18);
+  ctx.stroke();
+  ctx.fillStyle = UBA.navy;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.font = `700 44px ${FONT}`;
+  ctx.fillText('ZONA', 256, 76);
+  ctx.font = `900 92px ${FONT}`;
+  ctx.fillText(z.label, 256, 160, 450);
+  return toTexture(c, { anisotropy: 16 });
+}
+
+// Road signs at the start of each zone, facing the audience.
+function buildZoneSigns(group, M) {
+  for (const z of LAP_ZONES) {
+    const { pos } = zoneSignAt(z);
+    const g = new THREE.Group();
+    const post = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.055, 1.3, 10), M.steel));
+    post.position.y = 0.65;
+    g.add(post);
+    const w = 1.5;
+    const h = w / 2;
+    const back = shadowed(new THREE.Mesh(new RoundedBoxGeometry(w + 0.05, h + 0.05, 0.05, 2, 0.02), M.steel));
+    back.position.y = 1.3 + h / 2 - 0.1;
+    g.add(back);
+    const face = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: zoneSignTexture(z), roughness: 0.45 }));
+    face.position.set(0, 1.3 + h / 2 - 0.1, 0.028);
+    g.add(face);
+    g.position.set(pos.x, 0, pos.z);
+    g.rotation.x = -0.12;
+    group.add(g);
+  }
+}
+
+// Checkered flag at Destino: furled until the car arrives.
+function buildFlag(group, M) {
+  const g = new THREE.Group();
+  g.userData.dynamic = true;
+  const pole = shadowed(new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 2.4, 12), M.steel));
+  pole.position.y = 1.2;
+  g.add(pole);
+  const knob = shadowed(new THREE.Mesh(new THREE.SphereGeometry(0.08, 14, 10), M.gold));
+  knob.position.y = 2.42;
+  g.add(knob);
+  const cloth = new THREE.Group();
+  cloth.position.set(0, 2.25, 0);
+  const geo = new THREE.PlaneGeometry(1.3, 0.85, 16, 4);
+  geo.translate(0.65, -0.425, 0);
+  const tex = checkerTexture();
+  const mesh = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ map: tex, side: THREE.DoubleSide, roughness: 0.7 }));
+  mesh.castShadow = true;
+  cloth.add(mesh);
+  g.add(cloth);
+  g.position.set(LAP_FLAG_POS.x, 0, LAP_FLAG_POS.z);
+  const base = geo.attributes.position.array.slice();
+  const flag = {
+    group: g,
+    open: 0,
+    set(k) {
+      this.open = k;
+      cloth.scale.set(Math.max(0.04, k), Math.max(0.15, k), 1);
     },
-    plaques: plaques.list,
+    wave(time) {
+      const p = geo.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const x = base[i * 3];
+        p.array[i * 3 + 2] = Math.sin(x * 4 - time * 6) * 0.08 * x * this.open;
+      }
+      p.needsUpdate = true;
+    },
   };
+  flag.set(0);
+  group.add(g);
+  return flag;
+}
+
+export function buildLapTrack(group) {
+  const M = materials();
+  buildBridge(group, M, LAP);
+  const ranges = LAP_ZONES.map((z) => [...lapZoneRange(z), z.id]);
+  road(group, M, LAP, { pieces: zonePieces(LAP.length, ranges) });
+  buildLapSquares(group, M);
+  buildZoneSigns(group, M);
+  return { flag: buildFlag(group, M) };
 }

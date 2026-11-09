@@ -1,21 +1,19 @@
-import { AUTOS, GIROS, casilla } from './content/guion.js';
-import { FORK, turnInfo } from './engine/flow.js';
+import { AUTOS, AUTO_VUELTA, GIROS_JUEGO, GIROS_VUELTA, TITULO, casilla } from './content/guion.js';
+import { FORK, LAP_POS, LAP_SQUARES, turnInfo } from './engine/flow.js';
 import { Store } from './engine/store.js';
 import { forkAceptar, forkLeer, forkNegociar, playMove } from './scene/fx.js';
-import { DESTINO_POS, MAIN, destinoSlot, queueSlot, squareS } from './scene/layout.js';
-import { Stage } from './scene/stage.js';
+import { INICIO_S, squareS } from './scene/layout.js';
+import { LAP_CAR, Stage } from './scene/stage.js';
 import { Cards } from './ui/cards.js';
 import { Effects } from './ui/effects.js';
 import { Hud } from './ui/hud.js';
 import { Menu, Resume } from './ui/menu.js';
-import { Finale, Fork, Phone, Transition } from './ui/scenes.js';
+import { Finale, Fork, Phone } from './ui/scenes.js';
+import { Slides } from './ui/slides.js';
 import { Sound } from './ui/sound.js';
 
 // Phases shown full screen, without the board HUD.
-const PRE = ['transicion', 'celular', 'celular2', 'clausulas'];
-
-// Halfway between the house and the last parked car.
-const ARRIVAL = DESTINO_POS.clone().lerp(MAIN.at(destinoSlot(0)).p, 0.5);
+const PRE = ['celular', 'celular2', 'clausulas'];
 
 function safeStorage() {
   try {
@@ -44,14 +42,15 @@ class App {
     await Promise.all(['400', '700', '900', 'italic 400', 'italic 700'].map((w) => document.fonts.load(`${w} 32px Bitter`))).catch(() => {});
     const s = this.store.settings;
     this.sound.set({ enabled: s.sonido, volume: s.volumen });
+    document.title = s.titulo;
 
-    this.stage = new Stage(document.getElementById('stage'), { quality: s.calidad, onSpinTick: () => this.sound.tick() });
+    this.stage = new Stage(document.getElementById('stage'), { quality: s.calidad, title: s.titulo, onSpinTick: () => this.sound.tick() });
     await this.stage.init();
     this.stage.setSpeed(s.velocidad);
 
     this.hud = new Hud(this.root, this);
     this.effects = new Effects(this.root, this);
-    this.transition = new Transition(this.root);
+    this.slides = new Slides(this.root, this);
     this.fork = new Fork(this.root, this);
     this.finale = new Finale(this.root, this);
     this.cards = new Cards(this.root, this);
@@ -66,7 +65,8 @@ class App {
     this.ui = {
       storm: (on) => this.effects.storm(on),
       lightning: () => this.effects.lightning(),
-      bubble: (kind, pos, seconds) => this.effects.bubble(kind, pos, seconds),
+      bubble: (kind, pos, seconds, extra) => this.effects.bubble(kind, pos, seconds, extra),
+      gavel: () => this.effects.gavel(),
       adhesion: () => this.fork.adhesion(),
       terms: () => this.fork.terms(),
     };
@@ -74,7 +74,7 @@ class App {
     const state = this.store.state;
     this.stage.snap(state);
     this.show(state);
-    if (state.phase !== 'transicion') this.resume.show(state);
+    if (!(state.phase === 'vuelta' && state.stop === 0)) this.resume.show(state);
 
     window.addEventListener('keydown', (e) => this.onKey(e));
     document.addEventListener('pointerdown', () => this.sound.wake());
@@ -87,6 +87,7 @@ class App {
 
   next() {
     if (this.resume.isOpen()) return this.resume.hide();
+    if (this.menu.isOpen()) return this.menu.close();
     if (this.busy) return this.skip();
     const phase = this.store.state.phase;
     if (phase === 'bifurcacion' || phase === 'clausulas') return;
@@ -118,8 +119,8 @@ class App {
     this.redraw(this.store.state);
   }
 
-  // Space during an animation: a sign or the terms scroll is cut short on its
-  // own (the last line of the terms still shows); anything else finishes the step.
+  // Space during an animation: the terms scroll is cut short on its own;
+  // anything else finishes the step.
   skip() {
     if (this.fork.skip()) return;
     this.stage.skipAnimations();
@@ -142,6 +143,8 @@ class App {
     this.stage.endSkip();
     this.busy = false;
     this.root.classList.remove('busy');
+    // Mid-turn the board keeps what the animation left (a branch on the roof,
+    // a bump on the head) until the card closes.
     if (!(next.phase === 'turno' && next.step !== 'listo')) this.stage.snap(next);
     this.show(next);
     if (this.after) {
@@ -164,25 +167,31 @@ class App {
   show(state) {
     const p = state.phase;
     this.root.classList.toggle('pre', PRE.includes(p));
-    this.transition.show(p === 'transicion');
     if (p === 'celular') this.phone.show('inicio');
     else if (p === 'celular2' || p === 'clausulas') this.phone.show('final', { clauses: p === 'clausulas' });
     else this.phone.hide();
+    this.slides.show(p === 'vuelta' ? state : null);
+    this.slides.arrival(p === 'meta');
     this.fork.show(p === 'bifurcacion' ? state : null);
     this.finale.arrival(p === 'llegada');
     this.finale.sentencias(p === 'sentencias' ? state.shown : 0);
-    this.finale.ruedita(p === 'ruedita');
-    if (p === 'turno' && state.step !== 'listo') this.cards.show(state.turn, state.step);
+    this.finale.ruedita(p === 'ruedita' ? state : null);
+    if (p === 'turno' && ['pregunta', 'respuesta'].includes(state.step)) this.cards.show(state.turn, state.step);
     else this.cards.close();
     this.hud.render(state);
 
     const st = this.stage;
     if (PRE.includes(p)) st.view('intro', 1.2);
+    else if (p === 'vuelta') {
+      if (state.step === 'listo') st.view('overview', 1.3);
+      else st.frameSlide(st.pieces[LAP_CAR].position);
+    } else if (p === 'meta') st.view('meta', 1.4);
     else if (p === 'bifurcacion') st.view('fork');
     else if (p === 'turno') {
       if (state.step === 'listo') st.view('overview', 1.4);
+      else if (state.step === 'girado') st.view('spinner');
       else st.frameCard(st.pieces[turnInfo(state.turn).car].position);
-    } else if (p === 'llegada') st.focusPoint(ARRIVAL, { dist: 12, height: 11 });
+    } else if (p === 'llegada') st.view('casa', 1.4);
     else if (p === 'ruedita') st.view('spinner');
     else st.view('overview');
   }
@@ -192,45 +201,47 @@ class App {
   async play(prev, next, choice) {
     const st = this.stage;
     switch (prev.phase) {
-      case 'transicion':
-        this.transition.show(false);
+      case 'vuelta':
+        if (prev.step === 'listo') return this.playLap(prev.stop + 1);
+        if (next.step === 'listo') {
+          this.slides.close();
+          this.sound.whoosh();
+          st.view('overview', 1.3);
+          await st.wait(0.45);
+        }
+        return;
+      case 'meta':
+        this.slides.arrival(false);
         this.sound.whoosh();
-        await st.wait(0.35);
+        await st.wait(0.3);
         return;
       case 'celular':
         await this.phone.accept();
         this.root.classList.remove('pre');
+        st.setWorld('juego');
+        st.pieces[LAP_CAR].visible = false;
         st.view('salida', 1.4);
         await st.wait(0.5);
         await st.appear(() => this.sound.pop());
         st.view('fork', 1.2);
         await st.wait(0.5);
         return;
-      case 'bifurcacion':
+      case 'bifurcacion': {
+        const car = prev.car;
         this.fork.hide();
+        st.setActive(car);
         st.view(choice === 'negociar' ? 'barrier' : 'fork', 1.4);
-        if (choice === 'negociar') await forkNegociar(st, { sound: this.sound, ui: this.ui });
-        else if (choice === 'leer') await forkLeer(st, { ui: this.ui });
-        else await forkAceptar(st);
+        if (choice === 'negociar') await forkNegociar(st, { car, sound: this.sound, ui: this.ui });
+        else if (choice === 'leer') await forkLeer(st, { car, ui: this.ui });
+        else await forkAceptar(st, { car });
         if (next.phase === 'turno') {
           st.view('overview', 1.2);
           await st.wait(0.6);
         }
         return;
+      }
       case 'turno':
-        if (prev.step === 'listo') return this.playTurn(prev.turn);
-        if (prev.step === 'pregunta') return this.cards.show(prev.turn, 'respuesta');
-        this.cards.close();
-        this.effects.clear();
-        st.tidy();
-        if (next.phase === 'llegada') {
-          st.setActive(null);
-          st.focusPoint(ARRIVAL, { dist: 12, height: 11, rate: 1.4 });
-          await st.arrive();
-          this.finale.arrival(true, { fanfare: true });
-          await st.wait(0.8);
-        }
-        return;
+        return this.playTurn(prev, next);
       case 'llegada':
       case 'sentencias':
         if (next.phase === 'sentencias') {
@@ -244,7 +255,13 @@ class App {
         }
         return;
       case 'ruedita':
-        this.finale.ruedita(false);
+        if (next.phase === 'ruedita') {
+          this.finale.ruedita(next);
+          this.sound.bonus();
+          await st.wait(0.6);
+          return;
+        }
+        this.finale.ruedita(null);
         st.view('intro', 1.2);
         await st.wait(0.6);
         return;
@@ -256,32 +273,77 @@ class App {
     }
   }
 
-  // Spin (rigged), drive with the square's animation, reveal the plaque, open the card.
-  async playTurn(t) {
+  // Spin (rigged) and hop the class car square by square to content square n,
+  // or to Destino after the last one; then the slide title, or the arrival sign.
+  async playLap(n) {
     const st = this.stage;
-    const { car, square } = turnInfo(t);
-    const c = casilla(t);
-    this.effects.clear();
+    const value = GIROS_VUELTA[n - 1];
+    const from = n > 1 ? LAP_POS[n - 2] : 0;
+    const to = LAP_POS[n - 1];
     st.tidy();
-    st.setActive(car);
+    st.setActive(LAP_CAR);
     st.view('spinner', 2.0);
-    await st.wait(0.7);
+    await st.wait(0.6);
     this.sound.whoosh();
-    await st.spin(GIROS[t]);
+    await st.spin(value);
     this.sound.bonus();
-    this.hud.showSpin(GIROS[t], AUTOS[car].grupo);
-    await st.wait(1.0);
-    st.follow(car, { dist: 11, height: 10.5, rate: 1.6 });
-    const fromS = st.at[car]?.s ?? queueSlot(car);
-    await playMove(st, c.anim, { car, fromS, toS: squareS(square), sound: this.sound, ui: this.ui });
-    if (c.anim === 'martillo' || c.anim === 'sello') {
-      st.focusPoint(st.pieces[car].position, { dist: 10, height: 9 });
-      await (c.anim === 'martillo' ? this.effects.gavel() : this.effects.stamp());
+    this.hud.showSpin(value, AUTO_VUELTA.nombre);
+    await st.wait(0.8);
+    st.follow(LAP_CAR, { dist: 13, height: 13, rate: 2.4 });
+    await st.hopLap(from, to, () => this.sound.tick());
+    if (to === LAP_SQUARES) {
+      st.view('meta', 1.4);
+      await st.raiseFlag();
+      this.slides.arrival(true, { fanfare: true });
+      await st.wait(0.8);
+      return;
     }
-    await st.popPlaque(square);
-    await st.wait(0.3);
-    st.frameCard(st.pieces[car].position);
-    this.cards.show(t, 'pregunta');
+    st.frameSlide(st.pieces[LAP_CAR].position);
+    await st.wait(0.35);
+  }
+
+  // One click per step: spin, move (with the square's animation), the card,
+  // the answer, then close and hand over to the next car.
+  async playTurn(prev, next) {
+    const st = this.stage;
+    const t = prev.turn;
+    const { car, square } = turnInfo(t);
+    switch (prev.step) {
+      case 'listo':
+        this.effects.clear();
+        st.tidy();
+        st.setActive(car);
+        st.view('spinner', 2.0);
+        await st.wait(0.7);
+        this.sound.whoosh();
+        await st.spin(GIROS_JUEGO[t]);
+        this.sound.bonus();
+        this.hud.showSpin(GIROS_JUEGO[t], AUTOS[car].grupo);
+        await st.wait(0.6);
+        return;
+      case 'girado': {
+        const c = casilla(t);
+        st.follow(car, { dist: 11, height: 10.5, rate: 2.6 });
+        const fromS = st.at[car]?.s ?? INICIO_S;
+        await playMove(st, c.anim, { car, fromS, toS: squareS(square), sound: this.sound, ui: this.ui, casilla: c });
+        await st.wait(0.3);
+        return;
+      }
+      case 'movido':
+      case 'pregunta':
+        return;
+      default:
+        this.cards.close();
+        this.effects.clear();
+        st.tidy();
+        if (next.phase === 'llegada') {
+          st.setActive(null);
+          st.view('casa', 1.4);
+          await st.arrive();
+          this.finale.arrival(true, { fanfare: true });
+          await st.wait(0.8);
+        }
+    }
   }
 
   // ---------------------------------------------------------------- commands
@@ -312,13 +374,19 @@ class App {
     this.sound.set({ enabled: s.sonido, volume: s.volumen });
     this.stage.setSpeed(s.velocidad);
     if (s.calidad !== before) return location.reload();
+    if ('titulo' in patch) {
+      const title = s.titulo || TITULO;
+      document.title = title;
+      this.hud.setTitle(title);
+      this.stage.setTitle(title);
+    }
     this.hud.render(this.store.state);
   }
 
   onKey(e) {
     const tag = e.target.tagName;
     if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
-      if (e.key === 'Escape') e.target.blur();
+      if (e.key === 'Escape' || (e.key === 'Enter' && tag === 'INPUT')) e.target.blur();
       return;
     }
     if (e.metaKey || e.ctrlKey || e.altKey) return;
@@ -329,7 +397,7 @@ class App {
       else if (this.resume.isOpen()) this.resume.hide();
       return;
     }
-    if (k === 'g' || k === 'G') return this.menu.toggle();
+    if (/^[mg]$/i.test(k)) return this.menu.toggle();
     if (this.menu.isOpen()) return;
 
     if (k === ' ' || k === 'ArrowRight' || k === 'PageDown' || k === 'Enter') {
@@ -345,8 +413,6 @@ class App {
     switch (k.toLowerCase()) {
       case 'v':
         return this.command('overview');
-      case 'm':
-        return this.command('sound');
       case 'f':
         return this.command('full');
       default:

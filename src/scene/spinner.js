@@ -8,7 +8,7 @@ const RADIUS = 2.6;
 const TWO_PI = Math.PI * 2;
 
 export class Spinner {
-  constructor(count = 10) {
+  constructor(count = 10, title = '') {
     this.count = count;
     this.group = new THREE.Group();
     this.angle = 0;
@@ -46,7 +46,8 @@ export class Spinner {
     this.wheel.add(rim);
     const faceGeo = new THREE.CircleGeometry(RADIUS - 0.02, 96);
     faceGeo.rotateX(-Math.PI / 2);
-    const face = new THREE.Mesh(faceGeo, new THREE.MeshPhysicalMaterial({ map: spinnerTexture(count), roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 }));
+    this.faceMat = new THREE.MeshPhysicalMaterial({ map: spinnerTexture(count, title), roughness: 0.25, clearcoat: 1, clearcoatRoughness: 0.08 });
+    const face = new THREE.Mesh(faceGeo, this.faceMat);
     face.position.y = 0.101;
     face.receiveShadow = true;
     this.wheel.add(face);
@@ -95,6 +96,18 @@ export class Spinner {
   targetFor(v) {
     const seg = TWO_PI / this.count;
     return (v - 0.5) * seg - Math.PI / 2 + Math.PI / 2;
+  }
+
+  // Where the wheel comes to rest after a rigged spin on `v`.
+  restFor(v) {
+    const seg = TWO_PI / this.count;
+    return (((this.targetFor(v) - seg * 0.3) % TWO_PI) + TWO_PI) % TWO_PI;
+  }
+
+  setTitle(title) {
+    this.faceMat.map.dispose();
+    this.faceMat.map = spinnerTexture(this.count, title);
+    this.faceMat.needsUpdate = true;
   }
 
   // Returns a spin plan; `angleAt(t)` is a pure function of elapsed seconds.

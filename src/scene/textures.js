@@ -72,7 +72,7 @@ export function woodTexture(size = 1024) {
 }
 
 // Spinner face: wedge k (1..10) is centred at canvas angle (k - 0.5) * 2π/10 - π/2.
-export function spinnerTexture(count = 10) {
+export function spinnerTexture(count = 10, title = '') {
   const S = 1024;
   const { c, ctx } = canvas(S);
   const cx = S / 2;
@@ -115,10 +115,10 @@ export function spinnerTexture(count = 10) {
   ctx.strokeStyle = UBA.gold;
   ctx.stroke();
   ctx.fillStyle = UBA.goldLight;
-  ctx.font = `700 34px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  const text = 'EL JUEGO DE LOS CONTRATOS · ';
+  const text = `${(title || ' ').toUpperCase()} · `;
+  ctx.font = `700 ${Math.min(34, Math.round(1300 / text.length))}px ${FONT}`;
   const rr = r * 0.28;
   for (let i = 0; i < text.length; i++) {
     const a = (i / text.length) * Math.PI * 2 - Math.PI / 2;

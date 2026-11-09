@@ -1,7 +1,7 @@
 {
   "name": "juego-de-los-contratos",
   "version": "2.0.0",
-  "description": "El juego de los contratos: Transporte. Juego de mesa 3D guionado para la presentación del Grupo 7 (Facultad de Derecho, UBA)",
+  "description": "Destino: Sano y Salvo. Juego de mesa 3D guionado para la presentación del Grupo 7 (Facultad de Derecho, UBA)",
   "scripts": {
     "build": "node build.mjs",
     "dev": "node build.mjs --watch",

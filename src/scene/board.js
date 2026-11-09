@@ -1,12 +1,12 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { BOARD, DESTINO_POS, ROAD_WIDTH, distanceToRoads } from './layout.js';
+import { BOARD, DESTINO_POS, ROAD_WIDTH } from './layout.js';
 import { buildLandmarks, hidesLabel } from './landmarks.js';
 import { mergeStatic } from './merge.js';
 import { UBA } from './palette.js';
 import { PrintedBoard } from './printed.js';
-import { FACULTAD, isFree } from './space.js';
-import { PIECE_Y, buildTrack } from './track.js';
+import { FACULTAD, GAME_SPACE, LAP_SPACE } from './space.js';
+import { PIECE_Y, buildGameTrack, buildLapTrack, buildSharedTrack } from './track.js';
 import { signTexture, woodTexture } from './textures.js';
 
 function plastic(color, extra = {}) {
@@ -143,19 +143,24 @@ function church(white, roofMat) {
   return g;
 }
 
-function buildTown(group, rnd, spots) {
-  const white = plastic('#F6F3EC', { roughness: 0.3, clearcoat: 0.7 });
-  const roofs = [plastic('#C9503A'), plastic('#F6F3EC', { roughness: 0.3 }), plastic(UBA.navy)];
-  const glass = new THREE.MeshPhysicalMaterial({ color: '#7FA9C9', roughness: 0.1, metalness: 0.2, clearcoat: 1 });
+let townMats = null;
+
+function buildTown(group, rnd, spots, space) {
+  townMats ||= {
+    white: plastic('#F6F3EC', { roughness: 0.3, clearcoat: 0.7 }),
+    roofs: [plastic('#C9503A'), plastic('#F6F3EC', { roughness: 0.3 }), plastic(UBA.navy)],
+    glass: new THREE.MeshPhysicalMaterial({ color: '#7FA9C9', roughness: 0.1, metalness: 0.2, clearcoat: 1 }),
+  };
+  const { white, roofs, glass } = townMats;
   let placed = 0;
   for (let tries = 0; tries < 6000 && placed < 22; tries++) {
     const x = (rnd() - 0.5) * BOARD.width;
     const z = (rnd() - 0.5) * BOARD.depth;
     const kind = rnd();
     const r = kind < 0.12 ? 0.9 : 0.6;
-    if (!isFree(x, z, r, { road: 0.3 })) continue;
+    if (!space.isFree(x, z, r, { road: 0.3 })) continue;
     // Buildings line the roads: keep them close to one.
-    if (distanceToRoads(x, z) > ROAD_WIDTH / 2 + 0.3 + r + 1.6) continue;
+    if (space.distanceToRoads(x, z) > ROAD_WIDTH / 2 + 0.3 + r + 1.6) continue;
     if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + r + 0.15)) continue;
     const towerH = 1.2 + rnd() * 1.3;
     if (hidesLabel(spots, x, z, r, kind < 0.12 ? 2.2 : kind < 0.4 ? towerH : 1)) continue;
@@ -173,14 +178,19 @@ function buildTown(group, rnd, spots) {
 
 const TREE_GREENS = ['#3F8F4A', '#5BAF3A', '#2F7D4E', '#74B85A'];
 
-function buildTrees(group, rnd, spots, quality) {
-  const trunkMat = new THREE.MeshStandardMaterial({ color: '#7A4E32', roughness: 0.8 });
-  const leafMats = TREE_GREENS.map((c) => plastic(c, { clearcoat: 0.35, roughness: 0.45 }));
+let treeMats = null;
+
+function buildTrees(group, rnd, spots, quality, space) {
+  treeMats ||= {
+    trunk: new THREE.MeshStandardMaterial({ color: '#7A4E32', roughness: 0.8 }),
+    leaves: TREE_GREENS.map((c) => plastic(c, { clearcoat: 0.35, roughness: 0.45 })),
+  };
+  const { trunk: trunkMat, leaves: leafMats } = treeMats;
   const count = quality === 'bajo' ? 18 : 30;
   for (let i = 0, tries = 0; i < count && tries < 4000; tries++) {
     const x = (rnd() - 0.5) * BOARD.width;
     const z = (rnd() - 0.5) * BOARD.depth;
-    if (!isFree(x, z, 0.4, { road: 0.25, river: 0.15 })) continue;
+    if (!space.isFree(x, z, 0.4, { road: 0.25, river: 0.15 })) continue;
     if (spots.some((s) => Math.hypot(s.x - x, s.z - z) < s.r + 0.5)) continue;
     if (hidesLabel(spots, x, z, 0.4, 1.3)) continue;
     const t = new THREE.Group();
@@ -344,22 +354,38 @@ function buildFlag(group, at) {
   group.add(flag);
 }
 
-export function buildBoard(quality) {
+// One board with two worlds on it: the lap road and the game lanes. The table,
+// the river, the Facultad and the title plate are shared; each world brings its
+// own road, town and trees, and only one is visible at a time.
+export function buildBoard(quality, title) {
   const group = new THREE.Group();
+  const common = new THREE.Group();
+  const game = new THREE.Group();
+  const lap = new THREE.Group();
+  group.add(common, game, lap);
+
   const printed = new PrintedBoard(quality);
-  buildTable(group, quality);
-  buildBoardBody(group, printed);
-  const track = buildTrack();
-  group.add(track.group);
-  buildFacultad(group);
-  buildCasa(group);
-  const spots = [];
-  const rnd = seeded(11);
-  buildLandmarks(group, spots);
-  buildTown(group, rnd, spots);
-  buildTrees(group, rnd, spots, quality);
-  mergeStatic(group);
-  return { group, track };
+  buildTable(common, quality);
+  buildBoardBody(common, printed);
+  const { setTitle } = buildSharedTrack(common, title);
+  buildFacultad(common);
+
+  buildGameTrack(game);
+  buildCasa(game);
+  const { flag } = buildLapTrack(lap);
+
+  for (const [world, space, seed] of [
+    [game, GAME_SPACE, 11],
+    [lap, LAP_SPACE, 23],
+  ]) {
+    const spots = [];
+    const rnd = seeded(seed);
+    buildLandmarks(world, spots, space);
+    buildTown(world, rnd, spots, space);
+    buildTrees(world, rnd, spots, quality, space);
+  }
+  for (const g of [common, game, lap]) mergeStatic(g);
+  return { group, worlds: { juego: game, vuelta: lap }, flag, setTitle };
 }
 
 export { PIECE_Y };

@@ -1,33 +1,13 @@
-import { AUTOS, BIFURCACION, CELULAR, CELULAR_FINAL, CLAUSULAS, LLEGADA, RUEDITA, TERMINOS, TRANSICION } from '../content/guion.js';
+import { AUTOS, BIFURCACION, CELULAR, CELULAR_FINAL, CLAUSULAS, GIROS_JUEGO, GIROS_VUELTA, LLEGADA, RUEDITA, TERMINOS } from '../content/guion.js';
 import { FORK } from '../engine/flow.js';
 import { el, esc } from './dom.js';
 import { vehicleSVG } from './icons.js';
 
-// Overlays that tell the story around the board: the "class is over" sign, the
-// ride app on a phone, the fork chooser with its two interruptions, and the finale.
+// Overlays that tell the story around the board: the ride app on a phone, the
+// fork chooser with its two interruptions, and the finale.
 
 function toggle(node, on) {
   node.classList.toggle('open', on);
-}
-
-// ---------------------------------------------------------------- transition
-
-export class Transition {
-  constructor(root) {
-    this.node = el(`
-      <div class="transition">
-        <div class="board-sign">
-          <div class="chalk-title">${esc(TRANSICION.titulo)}</div>
-          <div class="chalk-text">${esc(TRANSICION.texto)}</div>
-          <div class="chalk-hint"><kbd>Espacio</kbd> para seguir</div>
-        </div>
-      </div>`);
-    root.appendChild(this.node);
-  }
-
-  show(on) {
-    toggle(this.node, on);
-  }
 }
 
 // ---------------------------------------------------------------- phone
@@ -146,6 +126,7 @@ export class Fork {
     const c = BIFURCACION.caminos;
     this.node = el(`
       <div class="fork-ui">
+        <div class="fork-who"></div>
         <div class="fork-title">${esc(BIFURCACION.cartel)}</div>
         <div class="fork-btns">
           ${FORK.map((k) => `<button class="fork-btn" data-k="${k}"><span class="fork-key">${c[k].tecla}</span><span class="fork-name">${esc(c[k].titulo)}</span></button>`).join('')}
@@ -167,18 +148,17 @@ export class Fork {
       </div>`);
     root.appendChild(this.adhesionNode);
 
+    // A few lines in Spanish, then the English goes on and on.
     const n = TERMINOS.castellano.length;
-    const es = [0, 1, 2].flatMap((r) => renumber(TERMINOS.castellano, 1 + r * n));
     const m = TERMINOS.ingles.length;
-    const en = [0, 1, 2].flatMap((r) => renumber(TERMINOS.ingles, 1 + 3 * n + r * m));
+    const es = renumber(TERMINOS.castellano, 1);
+    const en = [0, 1, 2, 3].flatMap((r) => renumber(TERMINOS.ingles, 1 + n + r * m));
     this.termsNode = el(`
       <div class="terms">
         <div class="terms-doc">
           <div class="terms-head">${esc(TERMINOS.titulo)}</div>
           <div class="terms-view"><div class="terms-roll">
             ${[...es, ...en].map((t) => `<p>${esc(t)}</p>`).join('')}
-            <p class="terms-final">${3 * (n + m) + 1}. ${esc(TERMINOS.final)}</p>
-            <p>&nbsp;</p><p>&nbsp;</p><p>&nbsp;</p><p>&nbsp;</p>
           </div></div>
         </div>
       </div>`);
@@ -186,9 +166,14 @@ export class Fork {
     this.skipper = null;
   }
 
+  // state: a 'bifurcacion' state (whose car is choosing), or null to hide.
   show(state) {
     toggle(this.node, !!state);
     if (!state) return;
+    const a = AUTOS[state.car];
+    const who = this.node.querySelector('.fork-who');
+    who.style.setProperty('--team', a.color);
+    who.innerHTML = `${vehicleSVG(a.vehiculo, a.color)}<span><b>${esc(a.grupo)}</b><small>${esc(a.nombre)} · auto ${state.car + 1} de ${AUTOS.length}</small></span>`;
     for (const b of this.node.querySelectorAll('[data-k]')) b.classList.toggle('tried', state.tried.includes(b.dataset.k));
   }
 
@@ -226,32 +211,21 @@ export class Fork {
     await this.app.stage.wait(0.35);
   }
 
-  // The terms race by and freeze on the arbitration line.
+  // The terms race by in small print until the text runs out. Nothing stops or
+  // lights up on the way.
   async terms() {
     const roll = this.termsNode.querySelector('.terms-roll');
     const view = this.termsNode.querySelector('.terms-view');
-    const fin = roll.querySelector('.terms-final');
     roll.style.transition = 'none';
     roll.style.transform = 'translateY(0)';
-    fin.classList.remove('lit');
     toggle(this.termsNode, true);
-    await this.app.stage.wait(0.5);
-    const target = fin.offsetTop - (view.clientHeight - fin.offsetHeight) / 2;
+    await this.app.stage.wait(0.4);
+    const target = Math.max(0, roll.scrollHeight - view.clientHeight * 0.15);
     const seconds = TERMINOS.segundos / this.app.stage.speed;
-    roll.style.transition = `transform ${seconds}s cubic-bezier(.45,.05,.7,1)`;
+    roll.style.transition = `transform ${seconds}s cubic-bezier(.3,.1,.8,1)`;
     roll.style.transform = `translateY(${-target}px)`;
     await this.hold(TERMINOS.segundos);
-    // Skipped mid-scroll: restart from where it is so the last stretch is quick.
-    const now = getComputedStyle(roll).transform;
     roll.style.transition = 'none';
-    roll.style.transform = now === 'none' ? 'translateY(0)' : now;
-    void roll.offsetHeight;
-    roll.style.transition = 'transform .5s cubic-bezier(.2,.8,.2,1)';
-    roll.style.transform = `translateY(${-target}px)`;
-    await this.app.stage.wait(0.5);
-    fin.classList.add('lit');
-    this.app.sound.knock();
-    await this.hold(3.5);
     toggle(this.termsNode, false);
     await this.app.stage.wait(0.4);
   }
@@ -268,7 +242,7 @@ export class Fork {
 export class Finale {
   constructor(root, app) {
     this.app = app;
-    this.arrivalNode = el(`<div class="arrival"><div class="arrival-sign"><small>Llegaron los cuatro autos</small><b>${esc(LLEGADA)}</b></div></div>`);
+    this.arrivalNode = el(`<div class="arrival"><div class="arrival-sign"><small>${esc(LLEGADA.sub)}</small><b>${esc(LLEGADA.titulo)}</b></div></div>`);
     this.cardsNode = el(`
       <div class="verdicts">
         <div class="verdicts-title">Sentencias</div>
@@ -288,7 +262,12 @@ export class Finale {
           ).join('')}
         </div>
       </div>`);
-    this.spinNode = el(`<div class="reveal"><div class="reveal-sign">${esc(RUEDITA.cartel)}</div></div>`);
+    const list = (title, nums) => `<div class="spins"><b>${esc(title)}</b><div>${nums.map((n, i) => `<span style="--i:${i}">${n}</span>`).join('')}</div></div>`;
+    this.spinNode = el(`
+      <div class="reveal">
+        <div class="reveal-sign">${esc(RUEDITA.cartel)}</div>
+        <div class="reveal-lists">${list(RUEDITA.vuelta, GIROS_VUELTA)}${list(RUEDITA.juego, GIROS_JUEGO)}</div>
+      </div>`);
     root.append(this.arrivalNode, this.cardsNode, this.spinNode);
   }
 
@@ -322,13 +301,15 @@ export class Finale {
     });
   }
 
-  ruedita(on) {
-    toggle(this.spinNode, on);
+  // state: a 'ruedita' state, or null to hide. With `lista` the numbers show.
+  ruedita(state) {
+    toggle(this.spinNode, !!state);
+    this.spinNode.classList.toggle('listed', !!state?.lista);
   }
 
   closeAll() {
     this.arrival(false);
     this.sentencias(0);
-    this.ruedita(false);
+    this.ruedita(null);
   }
 }

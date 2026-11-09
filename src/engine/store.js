@@ -1,9 +1,11 @@
-import { START, choose, next, same } from './flow.js';
+import { TITULO } from '../content/guion.js';
+import { START, choose, isValid, next, same } from './flow.js';
 
-export const STORE_VERSION = 1;
-export const STORAGE_KEY = 'juego-de-los-contratos.v1';
+export const STORE_VERSION = 2;
+export const STORAGE_KEY = 'destino-sano-y-salvo.v2';
 
 export const DEFAULT_SETTINGS = {
+  titulo: TITULO,
   calidad: 'alto', // 'alto' | 'medio' | 'bajo'
   sonido: true,
   volumen: 0.7,
@@ -13,7 +15,7 @@ export const DEFAULT_SETTINGS = {
 const MAX_BACK = 400;
 
 function valid(data) {
-  return data && data.v === STORE_VERSION && data.state && typeof data.state.phase === 'string' && Array.isArray(data.back);
+  return data && data.v === STORE_VERSION && isValid(data.state) && Array.isArray(data.back) && data.back.every(isValid) && (!data.fwd || data.fwd.every(isValid));
 }
 
 // Current script position plus the way back (and forward again after going back).
@@ -23,6 +25,7 @@ export class Store {
     this.storage = storage;
     this.data = valid(data) ? data : Store.fresh();
     this.data.settings = { ...DEFAULT_SETTINGS, ...this.data.settings };
+    if (typeof this.data.settings.titulo !== 'string' || !this.data.settings.titulo.trim()) this.data.settings.titulo = TITULO;
     this.data.fwd ||= [];
   }
 

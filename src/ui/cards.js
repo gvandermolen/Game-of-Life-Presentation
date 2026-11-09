@@ -1,5 +1,5 @@
 import { casilla } from '../content/guion.js';
-import { CARS, turnInfo } from '../engine/flow.js';
+import { TURNS, turnInfo } from '../engine/flow.js';
 import { el, esc } from './dom.js';
 import { vehicleSVG } from './icons.js';
 
@@ -10,8 +10,9 @@ export function inkOn(auto) {
   return auto.vehiculo === 'taxi' ? '#1d2554' : '#ffffff';
 }
 
-// The card of the square a car just landed on. Front: stage title, situation and
-// the question. Back (after a click): the expected answer, in another colour.
+// The card of the square a car just landed on: stage title, the situation and
+// the question in bold. With the next click the expected answer appears below,
+// in another colour, and multiple-choice options are marked right or wrong.
 export class Cards {
   constructor(root, app) {
     this.app = app;
@@ -26,57 +27,52 @@ export class Cards {
     return this.turn !== null;
   }
 
-  // side: 'pregunta' (front) or 'respuesta' (back).
+  // side: 'pregunta' or 'respuesta'.
   show(turn, side) {
     if (this.turn !== turn) this.build(turn);
-    const flip = this.side === 'pregunta' && side === 'respuesta';
+    const reveal = this.side === 'pregunta' && side === 'respuesta';
     this.side = side;
-    this.layer.querySelector('.flip').classList.toggle('back', side === 'respuesta');
-    if (flip) this.app.sound.flip();
+    const card = this.layer.querySelector('.card');
+    card.classList.toggle('answered', side === 'respuesta');
+    if (reveal) {
+      this.app.sound.flip();
+      const body = card.querySelector('.card-body');
+      setTimeout(() => body.scrollTo({ top: body.scrollHeight, behavior: 'smooth' }), 650);
+    }
     requestAnimationFrame(() => this.layer.classList.add('open'));
   }
 
   build(turn) {
     const c = casilla(turn);
-    const { car, square } = turnInfo(turn);
+    const { square } = turnInfo(turn);
     const a = c.auto;
     this.turn = turn;
     this.side = null;
     const opts = c.opciones
       ? `<ol class="opts">${c.opciones.map((o, i) => `<li data-ok="${c.correctas.includes(i)}"><span class="opt-key">${LETTERS[i]}</span><span>${esc(o)}</span></li>`).join('')}</ol>`
       : '';
-    const head = `
-      <div class="card-head">
-        <div class="card-num">${square}</div>
-        <div class="card-titles">
-          <div class="card-type">Casilla ${c.index + 1} de ${a.casillas.length}${c.subtitulo ? ` · ${esc(c.subtitulo)}` : ''}</div>
-          <div class="card-title">${esc(c.titulo)}</div>
-        </div>
-        <div class="card-team">${vehicleSVG(a.vehiculo, a.color)}<span><b>${esc(a.grupo)}</b><small>${esc(a.nombre)}</small></span></div>
-      </div>`;
-    const optsLen = (c.opciones || []).join('').length;
-    const long = (n) => (n > 330 ? ' long' : '');
+    const clock = c.reloj ? `<div class="card-clock" title="El parcial empieza a las ${esc(a.parcial)}"><i></i><b>${esc(c.reloj)}</b><small>Parcial ${esc(a.parcial)}</small></div>` : '';
+    // Each option line costs about as much room as 60 characters of text.
+    const size = c.situacion.length + c.pregunta.length + c.respuesta.length + (c.opciones || []).reduce((n, o) => n + o.length + 60, 0);
     this.layer.innerHTML = `
-      <div class="card-wrap"><div class="flip" style="--team:${a.color};--team-ink:${inkOn(a)}">
-        <div class="card face front${long(c.situacion.length + c.pregunta.length + optsLen)}">
-          ${head}
-          <div class="card-body">
-            <p class="card-text">${esc(c.situacion)}</p>
-            <p class="card-q">${esc(c.pregunta)}</p>
-            ${c.pista ? `<p class="card-hint">Pista: ${esc(c.pista)}</p>` : ''}
-            ${opts}
+      <div class="card-wrap"><div class="card${size > 780 ? ' long' : size > 560 ? ' mid' : ''}" style="--team:${a.color};--team-ink:${inkOn(a)}">
+        <div class="card-head">
+          <div class="card-num">${square}</div>
+          <div class="card-titles">
+            <div class="card-type">${esc(a.grupo)} · Casilla ${c.index + 1} de ${a.casillas.length}${c.subtitulo ? ` · ${esc(c.subtitulo)}` : ''}</div>
+            <div class="card-title">${esc(c.titulo)}</div>
           </div>
-          <div class="card-foot"><span>${esc(a.caso)}</span><span class="next-hint">Clic o <kbd>Espacio</kbd>: respuesta</span></div>
+          ${clock}
+          <div class="card-team">${vehicleSVG(a.vehiculo, a.color)}<span><b>${esc(a.grupo)}</b><small>${esc(a.nombre)}</small></span></div>
         </div>
-        <div class="card face back${long(c.pregunta.length + c.respuesta.length + optsLen)}">
-          ${head}
-          <div class="card-body">
-            <p class="card-q small">${esc(c.pregunta)}</p>
-            ${opts.replace('class="opts"', 'class="opts marked"')}
-            <div class="answer"><div class="answer-label">Respuesta</div><p>${esc(c.respuesta)}</p></div>
-          </div>
-          <div class="card-foot"><span>${esc(a.caso)}</span><span class="next-hint">Clic o <kbd>Espacio</kbd>: ${turn + 1 < CARS * a.casillas.length ? 'siguiente turno' : 'llegada'}</span></div>
+        <div class="card-body">
+          <p class="card-text">${esc(c.situacion)}</p>
+          <p class="card-q">${esc(c.pregunta)}</p>
+          ${c.pista ? `<p class="card-hint">Pista: ${esc(c.pista)}</p>` : ''}
+          ${opts}
+          <div class="answer"><div class="answer-label">Respuesta</div><p>${esc(c.respuesta)}</p></div>
         </div>
+        <div class="card-foot"><span>${esc(a.caso)}</span><span class="next-hint q">Clic o <kbd>Espacio</kbd>: respuesta</span><span class="next-hint a">Clic o <kbd>Espacio</kbd>: ${turn + 1 < TURNS ? 'siguiente turno' : 'llegada'}</span></div>
       </div></div>`;
     this.app.sound.card();
   }

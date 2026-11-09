@@ -1,10 +1,11 @@
 import * as THREE from 'three';
 import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
 import studioHdr from '../assets/studio.hdr';
-import { AUTOS } from '../content/guion.js';
-import { activeCar, carPlaces, revealed } from '../engine/flow.js';
+import { AUTOS, AUTO_VUELTA, TITULO } from '../content/guion.js';
+import { CARS, activeCar, carPlaces, lapPlace, spinShown, world } from '../engine/flow.js';
 import { buildBoard, PIECE_Y } from './board.js';
-import { BOARD, ENTRY, MAIN, SPINNER_POS, destinoSlot, forkSlot, queueSlot, squareS } from './layout.js';
+import { LAP, lapS } from './lap.js';
+import { BOARD, DESTINO_S, ENTRY, INICIO_S, LANES, SPINNER_POS, forkSlot, squareS } from './layout.js';
 import { UBA } from './palette.js';
 import { Post } from './post.js';
 import { Spinner } from './spinner.js';
@@ -21,7 +22,12 @@ const QUALITY = {
   bajo: { pixelRatio: 1, shadow: 1024, shadows: false, post: null },
 };
 
-export const PIECE_SCALE = 1.25;
+// Game pieces are a little smaller so four fit side by side; the lap car, alone
+// on its road, is bigger.
+export const PIECE_SCALE = 1.05;
+export const LAP_SCALE = 1.3;
+// Index of the lap car in `pieces`, after the four game cars.
+export const LAP_CAR = CARS;
 
 const VIEWS = {
   overview: { pos: [0, 44.5, 35.5], look: [0, -1.5, 2.6] },
@@ -31,15 +37,18 @@ const VIEWS = {
   fork: { pos: [-11, 21, 25], look: [-15.8, 0, 6.2] },
   // Steep enough to see the dead end over the gantry.
   barrier: { pos: [-15.5, 22, 12.5], look: [-19, 0, 3.2] },
+  meta: { pos: [-11.5, 11, -0.5], look: [-14.4, 0.6, -11.6] },
+  casa: { pos: [-5, 16, 19], look: [-6, 0, 5.2] },
 };
 
 const damp = (k, dt) => 1 - Math.exp(-k * dt);
 export const easeInOut = (k) => (k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2);
 
 export class Stage {
-  constructor(container, { quality = 'alto', onSpinTick } = {}) {
+  constructor(container, { quality = 'alto', title = TITULO, onSpinTick } = {}) {
     this.container = container;
     this.q = QUALITY[quality] || QUALITY.alto;
+    this.title = title;
     this.onSpinTick = onSpinTick;
     this.speed = 1;
     this.fast = false;
@@ -109,11 +118,16 @@ export class Stage {
     this.wantLook = this.camLook.clone();
     this.camRate = 1.1;
 
-    const { group, track } = buildBoard(this.q === QUALITY.bajo ? 'bajo' : 'alto');
-    scene.add(group);
-    this.track = track;
+    const board = buildBoard(this.q === QUALITY.bajo ? 'bajo' : 'alto', this.title);
+    scene.add(board.group);
+    this.worlds = board.worlds;
+    this.flag = board.flag;
+    this.setBoardTitle = board.setTitle;
+    this.frameHooks.add((dt, time) => this.flag.open > 0 && this.flag.wave(time));
+    this.world = null;
+    this.setWorld('vuelta');
 
-    this.spinner = new Spinner(10);
+    this.spinner = new Spinner(10, this.title);
     this.spinner.group.position.copy(SPINNER_POS);
     scene.add(this.spinner.group);
 
@@ -129,9 +143,22 @@ export class Stage {
     this.loop();
   }
 
+  setTitle(title) {
+    this.title = title;
+    this.setBoardTitle?.(title);
+    this.spinner?.setTitle(title);
+  }
+
+  // Show the lap road or the game lanes.
+  setWorld(name) {
+    if (this.world === name) return;
+    this.world = name;
+    for (const [k, g] of Object.entries(this.worlds)) g.visible = k === name;
+  }
+
   buildMarkers() {
     const gold = new THREE.MeshStandardMaterial({ color: UBA.gold, emissive: '#7a4f00', emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.25 });
-    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.66 * PIECE_SCALE, 0.06, 12, 64), gold);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.66, 0.06, 12, 64), gold);
     ring.rotation.x = Math.PI / 2;
     this.activeRing = ring;
     const cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.52, 24), gold);
@@ -147,15 +174,18 @@ export class Stage {
   }
 
   buildPieces() {
-    AUTOS.forEach((a, i) => {
-      const piece = buildPiece({ id: a.vehiculo, color: a.color });
-      piece.scale.setScalar(PIECE_SCALE);
+    const add = (team, scale) => {
+      const piece = buildPiece(team);
+      piece.userData.scale = scale;
+      piece.scale.setScalar(scale);
       piece.visible = false;
+      piece.userData.index = this.pieces.length;
       this.pieces.push(piece);
       this.at.push(null);
       this.scene.add(piece);
-      piece.userData.index = i;
-    });
+    };
+    for (const a of AUTOS) add({ id: a.vehiculo, color: a.color }, PIECE_SCALE);
+    add({ id: AUTO_VUELTA.vehiculo, color: AUTO_VUELTA.color }, LAP_SCALE);
   }
 
   resize() {
@@ -174,12 +204,12 @@ export class Stage {
     switch (place.at) {
       case 'horquilla':
         return { path: ENTRY, s: forkSlot(place.slot) };
-      case 'cola':
-        return { path: MAIN, s: queueSlot(place.slot) };
+      case 'inicio':
+        return { path: LANES[c], s: INICIO_S };
       case 'casilla':
-        return { path: MAIN, s: squareS(place.square) };
+        return { path: LANES[c], s: squareS(place.square) };
       case 'destino':
-        return { path: MAIN, s: destinoSlot(c) };
+        return { path: LANES[c], s: DESTINO_S };
       default:
         return null;
     }
@@ -203,6 +233,7 @@ export class Stage {
   // Everything derived from the state, without animation.
   snap(state) {
     this.tidy();
+    this.setWorld(world(state));
     carPlaces(state).forEach((place, c) => {
       const spot = this.spotOf(place, c);
       const piece = this.pieces[c];
@@ -210,8 +241,16 @@ export class Stage {
       if (spot) this.place(c, spot.path, spot.s);
       else this.at[c] = null;
     });
-    this.track.reveal(revealed(state));
-    this.setActive(activeCar(state));
+    const lap = lapPlace(state);
+    const car = this.pieces[LAP_CAR];
+    car.visible = lap.at === 'vuelta';
+    if (car.visible) this.place(LAP_CAR, LAP, lapS(lap.pos));
+    else this.at[LAP_CAR] = null;
+    this.flag.set(state.phase === 'meta' ? 1 : 0);
+    const shown = spinShown(state);
+    if (shown) this.spinner.setAngle(this.spinner.restFor(shown));
+    const active = activeCar(state);
+    this.setActive(active ?? (car.visible ? LAP_CAR : null));
   }
 
   setActive(i) {
@@ -272,10 +311,21 @@ export class Stage {
   frameCard(p) {
     this.followIndex = null;
     const x = p.x + 5.2;
-    const z = p.z + 1.2;
+    const z = Math.max(p.z + 1.2, -BOARD.depth / 2 + 8.5);
     this.wantLook.set(x, 0, z);
     this.wantPos.set(x, 13.5, z + 12.5);
     this.camRate = 1.6;
+  }
+
+  // Keep a point in the bottom-left corner, under and beside a large slide.
+  frameSlide(p) {
+    this.followIndex = null;
+    const x = p.x + 6.5;
+    // Near the back edge the table would fill the top of the screen.
+    const z = Math.max(p.z - 3.2, -BOARD.depth / 2 + 7.5);
+    this.wantLook.set(x, 0, z);
+    this.wantPos.set(x, 17, z + 15);
+    this.camRate = 1.4;
   }
 
   follow(i, opts = {}) {
@@ -293,45 +343,55 @@ export class Stage {
 
   pieceTop(c, height = 1.25) {
     const piece = this.pieces[c];
-    return piece.position.clone().add(new THREE.Vector3(0, height * PIECE_SCALE + piece.userData.lift.position.y, 0));
+    return piece.position.clone().add(new THREE.Vector3(0, height * piece.userData.scale + piece.userData.lift.position.y, 0));
   }
 
   // ---------------------------------------------------------------- motion
 
-  // Arc length of every other car currently on the board road.
-  othersOnMain(c) {
-    return this.at.map((a, j) => (j !== c && a?.path === MAIN ? a.s : null)).filter((s) => s !== null);
-  }
-
-  // Drive car c along the board road from s0 to s1. Parked cars on the way are
-  // hopped over, like lifting a piece over the others. `shape(k, s)` may add
-  // lateral offsets, lift or rotation for an animation.
-  async drive(c, s0, s1, { seconds, ease = easeInOut, shape, hop = true } = {}) {
-    const others = hop ? this.othersOnMain(c) : [];
+  // Drive car c along its current path (its lane, or the lap road) from s0 to
+  // s1. `shape(k, s)` may add lateral offsets, lift or rotation for an animation.
+  async drive(c, s0, s1, { seconds, ease = easeInOut, shape, path } = {}) {
+    const road = path || this.at[c]?.path || LANES[c];
     const secs = seconds ?? 0.7 + Math.abs(s1 - s0) * 0.14;
     await this.task(this.dur(secs), (k) => {
       const s = s0 + (s1 - s0) * ease(k);
-      let bump = 0;
-      for (const o of others) bump = Math.max(bump, Math.exp(-(((s - o) / 1.05) ** 2)));
-      const extra = shape?.(k, s) || {};
-      this.pose(c, MAIN.at(s), { ...extra, lift: bump + (extra.lift || 0) });
+      this.pose(c, road.at(s), shape?.(k, s) || {});
     });
-    this.at[c] = { path: MAIN, s: s1 };
+    this.at[c] = { path: road, s: s1 };
+  }
+
+  // The lap car hops square by square, counting the spin out loud.
+  async hopLap(from, to, onHop) {
+    const c = LAP_CAR;
+    for (let k = from + 1; k <= to; k++) {
+      const s0 = lapS(k - 1);
+      const s1 = lapS(k);
+      await this.task(this.dur(0.36), (t) => {
+        const e = easeInOut(t);
+        this.pose(c, LAP.at(s0 + (s1 - s0) * e), { lift: Math.sin(t * Math.PI) * 0.45 });
+      });
+      onHop?.(k);
+    }
+    this.at[c] = { path: LAP, s: lapS(to) };
+  }
+
+  // Raise the checkered flag at Destino.
+  async raiseFlag() {
+    await this.task(this.dur(0.9), (k) => this.flag.set(easeInOut(k)));
   }
 
   // Several cars along a route at once, each from its own start to its own end.
-  async convoy(route, from, to, { seconds = 2.4, ease = easeInOut } = {}) {
-    const cars = from.map((_, c) => c);
+  async convoy(route, cars, from, to, { seconds = 2.4, ease = easeInOut } = {}) {
     await this.task(this.dur(seconds), (k) => {
       const e = ease(k);
-      for (const c of cars) this.pose(c, route.at(from[c] + (to[c] - from[c]) * e));
+      cars.forEach((c, i) => this.pose(c, route.at(from[i] + (to[i] - from[i]) * e)));
     });
   }
 
   // Cars pop out at the Facultad, one by one, and line up at the fork.
   async appear(onPop) {
     const start = 0.35;
-    const jobs = this.pieces.map(async (piece, c) => {
+    const jobs = this.pieces.slice(0, CARS).map(async (piece, c) => {
       await this.wait(0.25 + c * 0.45);
       piece.visible = true;
       this.place(c, ENTRY, start);
@@ -349,11 +409,11 @@ export class Stage {
     await Promise.all(jobs);
   }
 
-  // All cars from their last squares to the parking in front of home.
+  // All cars from their last squares, along their lanes, to home.
   async arrive() {
-    const jobs = this.pieces.map((_, c) => {
-      const from = this.at[c]?.s ?? squareS(13 + c);
-      return this.drive(c, from, destinoSlot(c), { seconds: 2.6, hop: false });
+    const jobs = this.pieces.slice(0, CARS).map((_, c) => {
+      const from = this.at[c]?.s ?? squareS(18);
+      return this.drive(c, from, DESTINO_S, { seconds: 2.6, path: LANES[c] });
     });
     await Promise.all(jobs);
   }
@@ -369,6 +429,13 @@ export class Stage {
     });
     L.rotation.set(0, 0, 0);
     L.position.y = 0;
+  }
+
+  // Fix a prop to car c's body (a branch on the roof, wings) until the next tidy().
+  attach(c, obj) {
+    obj.userData.attached = true;
+    this.pieces[c].userData.vehicle.add(obj);
+    return obj;
   }
 
   async burst(pos, seconds = 1.0) {
@@ -412,18 +479,6 @@ export class Stage {
     this.spinner.setAngle(plan.end % (Math.PI * 2));
   }
 
-  // Reveal one more plaque with a little spring.
-  async popPlaque(k) {
-    const g = this.track.plaques[k - 1];
-    if (!g) return;
-    g.visible = true;
-    await this.task(this.dur(0.6), (t) => {
-      const e = 1 + Math.sin(t * Math.PI) * 0.25 * (1 - t);
-      g.scale.setScalar(Math.max(0.001, Math.min(1, t * 2.2)) * e);
-    });
-    g.scale.setScalar(1);
-  }
-
   // ---------------------------------------------------------------- lighting
 
   setDim(level) {
@@ -440,6 +495,7 @@ export class Stage {
   clearFx() {
     for (const child of [...this.fx.children]) this.fx.remove(child);
     this.frameHooks.clear();
+    this.frameHooks.add((dt, time) => this.flag.open > 0 && this.flag.wave(time));
   }
 
   // Undo what the last animation left behind (props, dim lights, a squashed roof).
@@ -447,8 +503,10 @@ export class Stage {
     this.clearFx();
     this.setDim(1);
     for (const piece of this.pieces) {
-      piece.userData.vehicle.scale.set(1, 1, 1);
-      piece.scale.setScalar(PIECE_SCALE);
+      const v = piece.userData.vehicle;
+      for (const o of [...v.children]) if (o.userData.attached) v.remove(o);
+      v.scale.set(1, 1, 1);
+      piece.scale.setScalar(piece.userData.scale);
       piece.userData.lift.position.y = 0;
       piece.userData.lift.rotation.set(0, 0, 0);
     }
@@ -547,10 +605,11 @@ export class Stage {
     });
     if (p) {
       const lift = p.userData.lift.position.y;
+      const scale = p.userData.scale;
       this.activeRing.position.set(p.position.x, p.position.y + 0.03, p.position.z);
-      const s = 1 + Math.sin(this.time * 4) * 0.06;
+      const s = scale * (1 + Math.sin(this.time * 4) * 0.06);
       this.activeRing.scale.set(s, s, s);
-      this.activeArrow.position.set(p.position.x, p.position.y + 1.95 * PIECE_SCALE + lift + Math.sin(this.time * 3) * 0.14, p.position.z);
+      this.activeArrow.position.set(p.position.x, p.position.y + 1.95 * scale + lift + Math.sin(this.time * 3) * 0.14, p.position.z);
       this.activeArrow.rotation.y = this.time * 1.5;
     }
     for (const piece of this.pieces) {

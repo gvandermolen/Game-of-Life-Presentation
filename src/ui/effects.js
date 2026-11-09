@@ -1,4 +1,4 @@
-import { ANIMACION, CELULAR } from '../content/guion.js';
+import { ANIMACION } from '../content/guion.js';
 import { el, esc } from './dom.js';
 
 const CONFETTI = ['#F7A600', '#91BDE1', '#FFFFFF', '#3BC3AD', '#EF4230', '#FCCD8E'];
@@ -14,8 +14,8 @@ const GAVEL = `
   </g>
 </svg>`;
 
-// HTML overlays drawn over the 3D board during animations: gavel, stamp,
-// storm, speech bubbles and confetti.
+// HTML overlays drawn over the 3D board during animations: gavel, storm,
+// speech bubbles and confetti.
 export class Effects {
   constructor(root, app) {
     this.app = app;
@@ -27,10 +27,6 @@ export class Effects {
         <canvas class="confetti"></canvas>
         <div class="bubbles"></div>
         <div class="gavel">${GAVEL}</div>
-        <div class="stamp-scene">
-          <div class="app-icon"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 1 7 7c0 5.2-7 13-7 13S5 14.2 5 9a7 7 0 0 1 7-7Zm0 4.2a2.8 2.8 0 1 0 0 5.6 2.8 2.8 0 0 0 0-5.6Z" fill="#fff"/></svg><span>${esc(CELULAR.app)}</span></div>
-          <div class="stamp">${esc(ANIMACION.sello)}</div>
-        </div>
       </div>`);
     root.appendChild(this.node);
     this.rainCanvas = this.node.querySelector('.rain');
@@ -86,9 +82,11 @@ export class Effects {
 
   // ---- bubbles that follow a point in the 3D scene
 
-  bubble(kind, worldPos, seconds) {
-    const text = kind === 'salto' ? ANIMACION.salto : ANIMACION.juez;
-    const b = { node: el(`<div class="bubble ${kind}">${esc(text)}</div>`), worldPos };
+  // `kind` picks the text from ANIMACION; `extra` is a clock time for 'tarde'.
+  bubble(kind, worldPos, seconds, extra = '') {
+    const text = ANIMACION[kind] || '';
+    const clock = kind === 'tarde' && extra ? `<span class="clock"><i></i>${esc(extra)}</span>` : '';
+    const b = { node: el(`<div class="bubble ${kind}">${clock}${esc(text)}</div>`), worldPos };
     this.bubbleRoot.appendChild(b.node);
     this.bubbles.add(b);
     this.update();
@@ -111,7 +109,7 @@ export class Effects {
     }
   }
 
-  // ---- gavel and stamp
+  // ---- gavel
 
   async gavel() {
     const g = this.node.querySelector('.gavel');
@@ -125,26 +123,6 @@ export class Effects {
     this.app.sound.knock();
     await s.wait(0.85);
     g.classList.remove('on');
-    await s.wait(0.25);
-  }
-
-  async stamp() {
-    const g = this.node.querySelector('.gavel');
-    const st = this.node.querySelector('.stamp-scene');
-    const s = this.app.stage;
-    g.classList.remove('on');
-    void g.offsetWidth;
-    g.classList.add('on', 'once');
-    await s.wait(0.55);
-    this.app.sound.knock();
-    await s.wait(0.5);
-    g.classList.remove('on', 'once');
-    st.classList.add('on');
-    await s.wait(0.75);
-    this.app.sound.stamp();
-    st.classList.add('stamped');
-    await s.wait(1.9);
-    st.classList.remove('on', 'stamped');
     await s.wait(0.25);
   }
 
@@ -196,6 +174,6 @@ export class Effects {
     this.confettiCanvas.getContext('2d').clearRect(0, 0, this.confettiCanvas.width, this.confettiCanvas.height);
     for (const b of this.bubbles) b.node.remove();
     this.bubbles.clear();
-    this.node.querySelectorAll('.on, .stamped').forEach((n) => n.classList.remove('on', 'stamped', 'once'));
+    this.node.querySelectorAll('.on').forEach((n) => n.classList.remove('on', 'once'));
   }
 }
