@@ -35,9 +35,10 @@ El sonido se prende y se apaga con el botón del parlante (arriba a la derecha) 
 | Turno, antes de girar | Gira la ruedita |
 | Ruedita girada | El auto avanza a su casilla, con su animación |
 | Auto en la casilla | Se abre la tarjeta: situación y pregunta |
-| Tarjeta | Aparece la respuesta debajo |
+| Tarjeta | Se da vuelta: la respuesta |
 | Respuesta | Se cierra y pasa al turno siguiente |
-| Después del turno 12 | Los autos llegan a Destino |
+| Última vuelta | Un `Espacio` gira la ruedita y otro lleva el auto a Destino, auto por auto |
+| Después del cuarto auto | Cartel de Destino con papel picado |
 
 ### Final
 

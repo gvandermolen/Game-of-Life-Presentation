@@ -5,19 +5,28 @@ import { CASILLAS_JUEGO, CASILLAS_VUELTA, GIROS_JUEGO, GIROS_VUELTA, VUELTA } fr
 // on screen (where each car is, which board is out, which overlay is open) is
 // derived from the state, so going back or jumping just swaps states.
 //
-//   vuelta  the explanatory lap: one car, 14 slides, then Destino ('meta')
-//   juego   phone, fork (one car at a time), 12 turns, arrival and the finale
+//   vuelta  the explanatory lap: one car, 13 slides, then Destino ('meta')
+//   juego   phone, fork (one car at a time), 12 card turns, a last round that
+//           takes each car to Destino, the arrival and the finale
 
 export const CARS = 4;
+// Rounds with a card; then one more round to Destino.
 export const ROUNDS = 3;
 export const TURNS = CARS * ROUNDS;
+export const ALL_TURNS = TURNS + CARS;
 export const STOPS = VUELTA.length;
 export const LANE_SQUARES = CASILLAS_JUEGO;
 export const LAP_SQUARES = CASILLAS_VUELTA;
 export const FORK = ['negociar', 'leer', 'aceptar'];
 
-// The steps of a game turn, one click each.
+// The steps of a game turn, one click each. The drive to Destino has no card:
+// spin, and the next click drives the car home and hands over.
 export const TURN_STEPS = ['listo', 'girado', 'movido', 'pregunta', 'respuesta'];
+export const FINAL_STEPS = ['listo', 'girado'];
+
+export function stepsOf(turn) {
+  return turn < TURNS ? TURN_STEPS : FINAL_STEPS;
+}
 
 export const START = Object.freeze({ phase: 'vuelta', stop: 0, step: 'listo' });
 
@@ -26,18 +35,19 @@ const cumulative = (list) => list.reduce((out, n) => [...out, (out.at(-1) || 0) 
 // Lap position (1..40) of each content square, and of Destino last.
 export const LAP_POS = cumulative(GIROS_VUELTA);
 
-// Lane position (1..20) of each car's card squares, one per round.
+// Position (1..20) of each car after each of its spins: its three card squares,
+// then Destino.
 export const LANE_POS = Array.from({ length: CARS }, (_, c) => cumulative(GIROS_JUEGO.filter((_, t) => t % CARS === c)));
 
 export function partsOf(stop) {
   return VUELTA[stop - 1]?.partes || 1;
 }
 
-// Turn t is played by car t % 4 in round t / 4.
+// Turn t is played by car t % 4 in round t / 4; round 3 is the drive to Destino.
 export function turnInfo(t) {
   const car = t % CARS;
   const round = Math.floor(t / CARS);
-  return { car, round, square: LANE_POS[car][round], spin: GIROS_JUEGO[t] };
+  return { car, round, square: LANE_POS[car][round], spin: GIROS_JUEGO[t], final: t >= TURNS };
 }
 
 export function next(s) {
@@ -51,9 +61,10 @@ export function next(s) {
     case 'celular':
       return { phase: 'bifurcacion', car: 0, tried: [] };
     case 'turno': {
-      const i = TURN_STEPS.indexOf(s.step);
-      if (i < TURN_STEPS.length - 1) return { phase: 'turno', turn: s.turn, step: TURN_STEPS[i + 1] };
-      return s.turn + 1 < TURNS ? { phase: 'turno', turn: s.turn + 1, step: 'listo' } : { phase: 'llegada' };
+      const steps = stepsOf(s.turn);
+      const i = steps.indexOf(s.step);
+      if (i < steps.length - 1) return { phase: 'turno', turn: s.turn, step: steps[i + 1] };
+      return s.turn + 1 < ALL_TURNS ? { phase: 'turno', turn: s.turn + 1, step: 'listo' } : { phase: 'llegada' };
     }
     case 'llegada':
       return { phase: 'sentencias', shown: 1 };
@@ -70,7 +81,7 @@ export function next(s) {
 }
 
 // Each car chooses its own road. Negotiating bounces it back to choose again;
-// the other two roads take it to the start of its lane. After the fourth car,
+// the other two roads take it to its place at Inicio. After the fourth car,
 // the board.
 export function choose(s, choice) {
   if (s.phase !== 'bifurcacion' || !FORK.includes(choice)) return s;
@@ -81,16 +92,16 @@ export function choose(s, choice) {
 // Turns whose move has already been played in this state.
 export function playedTurns(s) {
   if (s.phase === 'turno') return ['listo', 'girado'].includes(s.step) ? s.turn : s.turn + 1;
-  return ['llegada', 'sentencias', 'ruedita', 'celular2', 'clausulas'].includes(s.phase) ? TURNS : 0;
+  return ['llegada', 'sentencias', 'ruedita', 'celular2', 'clausulas'].includes(s.phase) ? ALL_TURNS : 0;
 }
 
-// Card squares car c has reached once `played` turns are done.
+// Spins car c has played once `played` turns are done (4 once at Destino).
 export function roundsDone(c, played) {
   return played > c ? Math.floor((played - 1 - c) / CARS) + 1 : 0;
 }
 
 // Where each game car is: hidden (lap and phone), queued at the fork (slot 0 is
-// the front), at the start of its lane, on a lane square, or at Destino.
+// the front), at its place at Inicio, on a square of the road, or at Destino.
 export function carPlaces(s) {
   const out = [];
   for (let c = 0; c < CARS; c++) {
@@ -98,7 +109,9 @@ export function carPlaces(s) {
     else if (s.phase === 'bifurcacion') out.push(c < s.car ? { at: 'inicio' } : { at: 'horquilla', slot: c - s.car });
     else if (s.phase === 'turno') {
       const done = roundsDone(c, playedTurns(s));
-      out.push(done ? { at: 'casilla', square: LANE_POS[c][done - 1] } : { at: 'inicio' });
+      if (!done) out.push({ at: 'inicio' });
+      else if (done > ROUNDS) out.push({ at: 'destino' });
+      else out.push({ at: 'casilla', square: LANE_POS[c][done - 1] });
     } else out.push({ at: 'destino' });
   }
   return out;
@@ -112,7 +125,7 @@ export function lapPlace(s) {
   return { at: 'oculto' };
 }
 
-// Which board is out: the lap road or the game lanes.
+// Which board is out: the lap road or the game road.
 export function world(s) {
   return ['vuelta', 'meta'].includes(s.phase) ? 'vuelta' : 'juego';
 }
@@ -161,7 +174,7 @@ export function isValid(s) {
     case 'bifurcacion':
       return int(s.car, 0, CARS - 1) && Array.isArray(s.tried);
     case 'turno':
-      return int(s.turn, 0, TURNS - 1) && TURN_STEPS.includes(s.step);
+      return int(s.turn, 0, ALL_TURNS - 1) && stepsOf(s.turn).includes(s.step);
     case 'sentencias':
       return int(s.shown, 1, CARS);
     case 'ruedita':

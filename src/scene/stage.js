@@ -5,7 +5,7 @@ import { AUTOS, AUTO_VUELTA, TITULO } from '../content/guion.js';
 import { CARS, activeCar, carPlaces, lapPlace, spinShown, world } from '../engine/flow.js';
 import { buildBoard, PIECE_Y } from './board.js';
 import { LAP, lapS } from './lap.js';
-import { BOARD, DESTINO_S, ENTRY, INICIO_S, LANES, SPINNER_POS, forkSlot, squareS } from './layout.js';
+import { BOARD, DESTINO_LINE, DESTINO_S, ENTRY, INICIO_LINE, INICIO_S, LANES, SPINNER_POS, forkSlot, passingLane, squareS } from './layout.js';
 import { UBA } from './palette.js';
 import { Post } from './post.js';
 import { Spinner } from './spinner.js';
@@ -22,8 +22,8 @@ const QUALITY = {
   bajo: { pixelRatio: 1, shadow: 1024, shadows: false, post: null },
 };
 
-// Game pieces are a little smaller so four fit side by side; the lap car, alone
-// on its road, is bigger.
+// Game pieces are a little smaller so four fit side by side at Inicio and
+// Destino; the lap car, alone on its road, is bigger.
 export const PIECE_SCALE = 1.05;
 export const LAP_SCALE = 1.3;
 // Index of the lap car in `pieces`, after the four game cars.
@@ -409,13 +409,15 @@ export class Stage {
     await Promise.all(jobs);
   }
 
-  // All cars from their last squares, along their lanes, to home.
-  async arrive() {
-    const jobs = this.pieces.slice(0, CARS).map((_, c) => {
-      const from = this.at[c]?.s ?? squareS(18);
-      return this.drive(c, from, DESTINO_S, { seconds: 2.6, path: LANES[c] });
-    });
-    await Promise.all(jobs);
+  // Car c's way from s0 to s1 on the single road, round the other cars
+  // parked on its squares.
+  passing(c, s0, s1) {
+    const parked = [];
+    for (let o = 0; o < CARS; o++) {
+      const at = this.at[o];
+      if (o !== c && this.pieces[o].visible && at?.path === LANES[o] && at.s > INICIO_LINE && at.s < DESTINO_LINE) parked.push(at.s);
+    }
+    return passingLane(c, s0, s1, parked);
   }
 
   // Shake car c's body: a quick jolt after a hit.

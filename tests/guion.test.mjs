@@ -1,21 +1,21 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { AUTOS, CLAUSULAS, GIROS_JUEGO, GIROS_VUELTA, TERMINOS, VUELTA, ZONAS, casilla } from '../src/content/guion.js';
-import { CARS, LAP_SQUARES, ROUNDS, STOPS, TURNS } from '../src/engine/flow.js';
+import { ALL_TURNS, CARS, LANE_SQUARES, LAP_SQUARES, ROUNDS, STOPS } from '../src/engine/flow.js';
 
 const ANIMS = ['choque', 'martillo', 'alcance', 'perroTormenta', 'salto', 'pozo', 'amsterdam'];
 const LAYOUTS = ['linea', 'renglones', 'columnas', 'etapas', 'extincion', 'tarjetas', 'enfrentadas'];
-const FIGURES = ['escudo', 'boleto', 'cadena', 'mapa'];
+const FIGURES = ['escudo', 'boleto', 'cadena'];
 
-test('fourteen slides in three zones, each with what its layout needs', () => {
-  assert.equal(VUELTA.length, 14);
-  assert.equal(STOPS, 14);
+test('thirteen slides in three zones, each with what its layout needs', () => {
+  assert.equal(VUELTA.length, 13);
+  assert.equal(STOPS, 13);
   assert.deepEqual(
     ZONAS.map((z) => [z.nombre, z.desde, z.hasta]),
     [
       ['Embarco', 1, 6],
       ['Viaje', 7, 10],
-      ['Desembarco', 11, 14],
+      ['Desembarco', 11, 13],
     ],
   );
   for (const [i, v] of VUELTA.entries()) {
@@ -26,18 +26,34 @@ test('fourteen slides in three zones, each with what its layout needs', () => {
     const need = { linea: 'hitos', renglones: 'renglones', columnas: 'columnas', etapas: 'columnas', extincion: 'grupos', tarjetas: 'tarjetas', enfrentadas: 'columnas' }[v.diseno];
     assert.ok(Array.isArray(v[need]) && v[need].length, `${id} needs ${need}`);
   }
-  assert.equal(VUELTA[4].columnas.flatMap((c) => c.renglones).length, VUELTA[4].partes, 'one click per obligation');
+  assert.equal(VUELTA[4].partes, undefined, 'the obligations show at once');
   assert.equal(VUELTA[7].tarjetas.length + 1, VUELTA[7].partes, 'one click per card, then the box');
-  assert.equal(VUELTA[12].columnas.length, VUELTA[12].partes, 'one click per column');
+  assert.equal(VUELTA[11].columnas.length, VUELTA[11].partes, 'one click per column');
+  assert.equal(VUELTA[1].recuadros.length, 4, 'four boxes in a row on square 2');
+  assert.match(VUELTA[10].recuadro, /Art\. 1109/, 'jurisdiction box on square 11');
+  assert.equal(VUELTA[0].hitos[2].nota, 'Ledesma y Uriarte Martínez');
+  assert.ok(!VUELTA.some((v) => /Abusividad/.test(v.tema)), 'the old square 12 is gone');
 });
 
 test('slide titles follow the spec', () => {
-  assert.equal(VUELTA[0].titulo, 'Historia y evolución del contrato');
-  assert.equal(VUELTA[6].titulo, 'Llegar sano y salvo');
-  assert.equal(VUELTA[7].titulo, 'Solo lo libera una causa ajena');
-  assert.equal(VUELTA[10].titulo, 'Un contrato que se celebra con un clic');
-  assert.equal(VUELTA[12].titulo, '¿Intermediaria o empresa de transporte?');
-  assert.equal(VUELTA[13].titulo, 'El algoritmo');
+  assert.deepEqual(
+    VUELTA.map((v) => v.titulo),
+    [
+      'Historia y evolución del contrato',
+      'Definición y régimen legal aplicable',
+      'Personas y cosas: dos regímenes distintos',
+      'Caracteres, adhesión y consumo',
+      'Las etapas y las obligaciones',
+      'Modos de extinción del contrato',
+      'Responsabilidad',
+      'Solo lo libera una causa ajena',
+      'Cláusulas inválidas',
+      '¿Quién responde?',
+      'Un contrato que se celebra con un clic',
+      '¿Intermediaria o empresa de transporte?',
+      'El algoritmo',
+    ],
+  );
 });
 
 test('the lap spins add up to Destino', () => {
@@ -72,14 +88,14 @@ test('every animation in the spec is scripted on the right square', () => {
   assert.ok(AUTOS[1].casillas.every((c) => c.reloj), 'the late-for-the-exam clock on car 2');
 });
 
-test('one spinner number per game turn, from 1 to 10, never twice in a row', () => {
-  for (const list of [GIROS_JUEGO, GIROS_VUELTA]) {
-    list.forEach((n, i) => {
-      assert.ok(Number.isInteger(n) && n >= 1 && n <= 10);
-      if (i) assert.notEqual(n, list[i - 1]);
-    });
+test('one spinner number per game turn, from 1 to 10; each car ends exactly on Destino', () => {
+  for (const n of [...GIROS_JUEGO, ...GIROS_VUELTA]) assert.ok(Number.isInteger(n) && n >= 1 && n <= 10);
+  assert.equal(GIROS_JUEGO.length, ALL_TURNS);
+  for (let c = 0; c < CARS; c++) {
+    const sum = GIROS_JUEGO.filter((_, t) => t % CARS === c).reduce((a, b) => a + b, 0);
+    assert.equal(sum, LANE_SQUARES, `car ${c + 1}`);
   }
-  assert.equal(GIROS_JUEGO.length, TURNS);
+  assert.deepEqual(GIROS_JUEGO.slice(-CARS), [3, 4, 6, 1]);
 });
 
 test('casilla(turn) follows the interleaved order', () => {
@@ -90,6 +106,7 @@ test('casilla(turn) follows the interleaved order', () => {
   assert.equal(casilla(5).titulo, 'El perro y la tormenta');
   assert.equal(casilla(10).titulo, 'La Justicia confirma');
   assert.equal(casilla(11).titulo, 'Llega la regulación (2026)');
+  assert.equal(casilla(12), null, 'no card on the way to Destino');
 });
 
 test('verdicts follow the spec', () => {

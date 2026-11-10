@@ -3,10 +3,11 @@ import { CARS, LANE_SQUARES } from '../engine/flow.js';
 
 // World layout of the game. The road leaves the Facultad de Derecho at the
 // front-left, crosses the Riachuelo and splits in three at the fork (negotiate,
-// read, accept). The two roads that lead somewhere merge into the board, which
-// opens into four parallel lanes, one per car, from Inicio round the spinner to
-// Destino in front of home. The lap of the explanation has its own road
-// (lap.js); both share the board, the river and the Facultad.
+// read, accept). The two roads that lead somewhere merge into a wide Inicio,
+// where the four cars wait side by side; then a single road winds round the
+// spinner, the cars one behind the other, and opens again at Destino in front of
+// home. The lap of the explanation has its own road (lap.js); both share the
+// board, the river and the Facultad.
 
 export const BOARD = { width: 46.5, depth: 34, height: 1.1 };
 export const ROAD_WIDTH = 2.0;
@@ -15,12 +16,16 @@ export const CAR_GAP = 1.6;
 export const SPINNER_POS = new THREE.Vector3(-2.5, 0, -1.5);
 export const SPINNER_CLEARANCE = 3.4;
 
-// Lanes of the board.
+// The game road: one car wide, plus room to pass a parked car on the shoulder.
+export const GAME_HALF = 1.5;
+export const LANE_TILE = { length: 2.3, width: GAME_HALF * 2 - 0.3 };
+// Sideways step of a car overtaking a parked one.
+export const PASS_OFFSET = 1.4;
+// At Inicio and Destino the four cars stand side by side, this far apart.
 export const LANE_GAP = 1.45;
-export const LANE_TILE = { length: 2.0, width: LANE_GAP - 0.3 };
 export const LANES_HALF = (CARS * LANE_GAP) / 2;
-// Distance over which the lanes fan out from the single road.
-export const TAPER = 4.6;
+// Distance over which the road fans out from the fork into the Inicio area.
+export const TAPER = 3.2;
 
 const FILLET = 3.2;
 
@@ -122,17 +127,46 @@ export const BRANCHES = {
   aceptar: new Path('aceptar', [F, STEM, [-14.6, 4.4], I], 2.4),
 };
 
-// Centre line of the four lanes, round the spinner.
-export const MAIN = new Path('tablero', [I, [-14.6, -11.2], [11.5, -11.2], [11.5, 5.9], [-6.2, 5.9]], 4.6);
+// Centre line of the game road: down from Inicio, a bend round the back of the
+// spinner, up the right side and along the front to home.
+export const MAIN = new Path(
+  'tablero',
+  [I, [-14.6, -12.0], [-7.0, -12.0], [-7.0, -7.2], [5.0, -7.2], [5.0, -12.0], [14.5, -12.0], [14.5, 5.9], [-6.2, 5.9]],
+  2.6,
+);
 
 const smooth = (x) => {
   const k = Math.min(1, Math.max(0, x));
   return k * k * (3 - 2 * k);
 };
 
-// How far the lanes have opened at s (0 at the merge, 1 once fully apart).
+// Where the cars wait at Inicio, side by side, before the line.
+export const INICIO_S = TAPER + 0.5;
+export const INICIO_LINE = INICIO_S + 1.0;
+// Past the line the road narrows to one car.
+const NARROW_FROM = INICIO_LINE + 0.3;
+const NARROW = 4.2;
+const FIRST = NARROW_FROM + NARROW + 1.6;
+// After square 19 the road opens again into Destino.
+const OPEN = 3.0;
+const TAIL = LANE_TILE.length / 2 + 0.4 + OPEN + 0.3 + 2.0;
+export const SQUARE_STEP = (MAIN.length - FIRST - TAIL) / (LANE_SQUARES - 2);
+const DEST_FROM = FIRST + (LANE_SQUARES - 2) * SQUARE_STEP + LANE_TILE.length / 2 + 0.4;
+export const DESTINO_LINE = DEST_FROM + OPEN + 0.3;
+export const DESTINO_S = DESTINO_LINE + 1.0;
+
+// Arc length of square k (1..20). Square 20 is Destino, where every car parks
+// beside the others.
+export function squareS(k) {
+  return k >= LANE_SQUARES ? DESTINO_S : FIRST + (k - 1) * SQUARE_STEP;
+}
+
+// How far apart the cars' places are at s: 0 on the single road, 1 at Inicio
+// and at Destino.
 export function spread(s) {
-  return smooth(s / TAPER);
+  if (s < NARROW_FROM) return smooth(s / TAPER);
+  if (s < DEST_FROM) return 1 - smooth((s - NARROW_FROM) / NARROW);
+  return smooth((s - DEST_FROM) / OPEN);
 }
 
 export function laneOffset(c, s) {
@@ -141,21 +175,36 @@ export function laneOffset(c, s) {
 
 // Half width of the asphalt of the board at s.
 export function boardHalf(s) {
-  return ROAD_WIDTH / 2 + (LANES_HALF - ROAD_WIDTH / 2) * spread(s);
+  if (s < NARROW_FROM) return ROAD_WIDTH / 2 + (LANES_HALF - ROAD_WIDTH / 2) * smooth(s / TAPER);
+  return GAME_HALF + (LANES_HALF - GAME_HALF) * spread(s);
 }
 
-// One car's lane: the centre line shifted sideways. Arc length is measured on
-// the centre line, so the same s is the same square in every lane.
+// Sideways offset while passing a parked car at arc length `at`: full beside it,
+// none two squares' worth of tile away.
+function passBump(s, at) {
+  return 1 - smooth((Math.abs(s - at) - 0.9) / 1.3);
+}
+
+// One car's way along the board: its place at Inicio, the single road (with a
+// step aside past each parked car in `passing`, a list of arc lengths) and its
+// place at Destino. Arc length is measured on the centre line.
 export class Lane {
-  constructor(c) {
+  constructor(c, passing = []) {
     this.c = c;
-    this.name = `carril ${c + 1}`;
+    this.passing = passing;
+    this.name = `auto ${c + 1}`;
     this.length = MAIN.length;
+  }
+
+  lateral(s) {
+    let pass = 0;
+    for (const at of this.passing) pass = Math.max(pass, passBump(s, at));
+    return laneOffset(this.c, s) + PASS_OFFSET * pass;
   }
 
   point(s) {
     const f = MAIN.at(s);
-    return f.p.addScaledVector(f.normal, laneOffset(this.c, s));
+    return f.p.addScaledVector(f.normal, this.lateral(s));
   }
 
   at(s) {
@@ -177,6 +226,17 @@ export class Lane {
   }
 }
 
+// Car c's way from s0 to s1, stepping round the cars parked at `parked` (arc
+// lengths of their squares) that lie strictly in between.
+export function passingLane(c, s0, s1, parked) {
+  const lo = Math.min(s0, s1) + 0.5;
+  const hi = Math.max(s0, s1) - 0.5;
+  return new Lane(
+    c,
+    parked.filter((s) => s > lo && s < hi),
+  );
+}
+
 export const LANES = Array.from({ length: CARS }, (_, c) => new Lane(c));
 
 // Barrier at the dead end of the negotiating road.
@@ -188,20 +248,6 @@ export const GANTRY_Z = 4.7;
 // Cars wait at the fork in a column on the entry road, the next one in front.
 export function forkSlot(i) {
   return ENTRY.length - 0.95 - i * CAR_GAP;
-}
-
-// Where the cars wait in their lanes before the Inicio line.
-export const INICIO_S = TAPER + 0.7;
-export const INICIO_LINE = INICIO_S + 1.15;
-const FIRST = INICIO_LINE + 1.45;
-const LEAD_OUT = 3.6;
-export const SQUARE_STEP = (MAIN.length - FIRST - LEAD_OUT) / (LANE_SQUARES - 1);
-export const DESTINO_LINE = FIRST + (LANE_SQUARES - 1) * SQUARE_STEP + SQUARE_STEP / 2 + 0.2;
-export const DESTINO_S = MAIN.length - 1.1;
-
-// Arc length of square k (1..20), the same in every lane.
-export function squareS(k) {
-  return FIRST + (k - 1) * SQUARE_STEP;
 }
 
 export const DESTINO_POS = (() => {
@@ -300,14 +346,37 @@ export function riverDistance(x, z) {
   return best;
 }
 
-// Zone names sit beside their stretch: outside the lanes, or inside where the
-// outside runs along the river.
+// Point beside the game road at arc length s, `extra` past its edge, on side
+// +1 (towards the normal) or -1.
+export function verge(s, side, extra) {
+  const f = MAIN.at(s);
+  return { pos: f.p.clone().addScaledVector(f.normal, side * (boardHalf(s) + extra)), frame: f };
+}
+
+// Landmarks of the game board ({x, z, r}), filled in when the board is built.
+export const LANDMARK_SPOTS = [];
+
+// The side of the road at s with more room for a prop: away from other roads,
+// the river, the spinner, the landmarks and the edge of the board.
+export function freeSide(s, extra = 1.2) {
+  const room = (side) => {
+    const { pos } = verge(s, side, extra);
+    return Math.min(
+      ...LANDMARK_SPOTS.map((l) => Math.hypot(pos.x - l.x, pos.z - l.z) - l.r - 1.0),
+      distanceToRoads(pos.x, pos.z) - ROAD_WIDTH / 2,
+      riverDistance(pos.x, pos.z) - RIVER_WIDTH / 2,
+      Math.hypot(pos.x - SPINNER_POS.x, pos.z - SPINNER_POS.z) - SPINNER_CLEARANCE,
+      BOARD.width / 2 - Math.abs(pos.x),
+      BOARD.depth / 2 - Math.abs(pos.z),
+    );
+  };
+  return room(1) >= room(-1) ? 1 : -1;
+}
+
+// Zone names sit beside their stretch, on the roomier side.
 export function zoneLabelAt(zone) {
-  const mid = (squareS(zone.from) + squareS(zone.to)) / 2;
-  const f = MAIN.at(mid);
-  const out = f.p.clone().addScaledVector(f.normal, -(LANES_HALF + 0.95));
-  if (riverDistance(out.x, out.z) > RIVER_WIDTH / 2 + 0.9) return out;
-  return f.p.clone().addScaledVector(f.normal, LANES_HALF + 0.95);
+  const mid = (squareS(zone.from) + squareS(Math.min(zone.to, LANE_SQUARES - 1))) / 2;
+  return verge(mid, freeSide(mid, 1.4), 1.4).pos;
 }
 
 // Point where a road crosses the line z = const (the gantry spans the branches there).

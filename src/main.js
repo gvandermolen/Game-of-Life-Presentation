@@ -303,11 +303,12 @@ class App {
   }
 
   // One click per step: spin, move (with the square's animation), the card,
-  // the answer, then close and hand over to the next car.
+  // the answer, then close and hand over to the next car. In the last round
+  // the click after the spin drives the car to Destino.
   async playTurn(prev, next) {
     const st = this.stage;
     const t = prev.turn;
-    const { car, square } = turnInfo(t);
+    const { car, square, final } = turnInfo(t);
     switch (prev.step) {
       case 'listo':
         this.effects.clear();
@@ -323,10 +324,19 @@ class App {
         return;
       case 'girado': {
         const c = casilla(t);
-        st.follow(car, { dist: 11, height: 10.5, rate: 2.6 });
         const fromS = st.at[car]?.s ?? INICIO_S;
-        await playMove(st, c.anim, { car, fromS, toS: squareS(square), sound: this.sound, ui: this.ui, casilla: c });
-        await st.wait(0.3);
+        const toS = squareS(square);
+        const lane = st.passing(car, fromS, toS);
+        st.follow(car, { dist: 11, height: 10.5, rate: 2.6 });
+        await playMove(st, c?.anim, { car, fromS, toS, lane, sound: this.sound, ui: this.ui, casilla: c });
+        if (next.phase === 'llegada') {
+          st.setActive(null);
+          st.view('casa', 1.4);
+          this.finale.arrival(true, { fanfare: true });
+          await st.wait(0.8);
+          return;
+        }
+        await st.wait(final ? 0.5 : 0.3);
         return;
       }
       case 'movido':
@@ -336,13 +346,6 @@ class App {
         this.cards.close();
         this.effects.clear();
         st.tidy();
-        if (next.phase === 'llegada') {
-          st.setActive(null);
-          st.view('casa', 1.4);
-          await st.arrive();
-          this.finale.arrival(true, { fanfare: true });
-          await st.wait(0.8);
-        }
     }
   }
 

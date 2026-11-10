@@ -1,8 +1,8 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { AUTOS, BIFURCACION, SUBTITULO, TEMA, VUELTA } from '../content/guion.js';
-import { CARS, FORK, LANE_POS, LANE_SQUARES, LAP_SQUARES } from '../engine/flow.js';
-import { drawTopic } from '../ui/topics.js';
+import { BIFURCACION, SUBTITULO, TEMA, VUELTA } from '../content/guion.js';
+import { FORK, LANE_SQUARES, LAP_SQUARES } from '../engine/flow.js';
+import { TOPICS, drawTopic } from '../ui/topics.js';
 import { CONTENT_AT, LAP, LAP_FLAG_POS, LAP_TILE, LAP_ZONES, lapS, lapZoneRange, zoneSignAt } from './lap.js';
 import {
   BARRIER_S,
@@ -12,9 +12,7 @@ import {
   ENTRY,
   GANTRY_Z,
   INICIO_LINE,
-  LANES,
   LANES_HALF,
-  LANE_GAP,
   LANE_TILE,
   MAIN,
   ROAD_WIDTH,
@@ -171,7 +169,6 @@ function materials() {
     bank: new THREE.MeshStandardMaterial({ color: '#D9CDA6', roughness: 0.9 }),
     rail: plastic('#F4F1EA', { roughness: 0.35 }),
     steel: new THREE.MeshStandardMaterial({ color: '#B8BEC8', roughness: 0.3, metalness: 0.8 }),
-    tiles: AUTOS.map((a) => plastic(a.color, { roughness: 0.32, clearcoat: 0.75 })),
   };
   return shared;
 }
@@ -400,33 +397,20 @@ function buildLanes(group, M) {
   ['negociar', 'leer', 'aceptar'].forEach((k, i) => road(group, M, BRANCHES[k], { lift: (i + 1) * LIFT }));
   const ranges = ZONES.map((z) => [...zoneRange(z), z.id]);
   road(group, M, MAIN, { lift: 4 * LIFT, half: boardHalf, pieces: zonePieces(MAIN.length, ranges) });
-  // Dashed lines between the lanes.
-  for (let c = 0; c < CARS - 1; c++) {
-    const off = (c + 1 - CARS / 2) * LANE_GAP;
-    for (let s = INICIO_LINE + 0.4; s < DESTINO_LINE - 0.5; s += 1.1) {
-      group.add(flat(strip(MAIN.frames(s, s + 0.55, 0.1), 0.035, Y.marks - 0.004, 1, off), M.line));
-    }
-  }
 }
 
-const ink = (car) => (AUTOS[car].vehiculo === 'taxi' ? UBA.navy : '#FFFFFF');
-
+// Every square of the game road looks the same, so nobody can tell which ones
+// hold a card.
 function buildLaneSquares(group, M) {
-  for (let c = 0; c < CARS; c++) {
-    const lane = LANES[c];
-    for (let k = 1; k <= LANE_SQUARES; k++) {
-      const card = LANE_POS[c].includes(k);
-      const s = squareS(k);
-      group.add(shadowed(new THREE.Mesh(tileGeometry(lane, s, LANE_TILE.length, LANE_TILE.width / 2), card ? M.tiles[c] : M.pass)));
-      const { p, tangent, normal } = lane.at(s);
-      const { rot } = readableBaseline(tangent, normal);
-      group.add(textAt(String(k), p.x, p.z, { size: card ? 0.74 : 0.5, weight: 900, color: card ? ink(c) : '#8C8272', rot, y: Y.label }));
-    }
+  for (let k = 1; k < LANE_SQUARES; k++) {
+    const s = squareS(k);
+    group.add(shadowed(new THREE.Mesh(tileGeometry(MAIN, s, LANE_TILE.length, LANE_TILE.width / 2), M.pass)));
+    group.add(squareDecal(MAIN, s, k, iconFor(k, 5), 1.75));
   }
 }
 
-// Inicio and Destino lines across the four lanes. The words are painted
-// beside the board: Inicio by its line, Destino in front of home.
+// Inicio and Destino lines across the wide ends of the road. The words are
+// painted beside the board: Inicio by its line, Destino in front of home.
 function buildLaneMarks(group, M) {
   const width = LANES_HALF * 2;
   checkerLine(group, M, MAIN, INICIO_LINE, width, 12);
@@ -564,25 +548,40 @@ export function buildGameTrack(group) {
 
 // ---------------------------------------------------------------- the lap
 
-const LAP_ZONE_OF = (k) => LAP_ZONES.find((z) => k >= z.from && k <= z.to);
+// The drawings on the squares: the lap's topic icons, in a fixed shuffled order.
+const ICONS = Object.keys(TOPICS);
 
-function contentTexture(n, color) {
+function iconFor(k, seed) {
+  return ICONS[(k * 7 + seed) % ICONS.length];
+}
+
+// Number and drawing printed on a square.
+function squareTexture(k, iconName) {
   const S = 256;
   const { c, ctx } = canvas(S);
-  ctx.fillStyle = '#FFFFFF';
-  ctx.beginPath();
-  ctx.arc(S / 2, S / 2, S / 2 - 6, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.lineWidth = 10;
-  ctx.strokeStyle = UBA.navy;
-  ctx.stroke();
-  drawTopic(ctx, VUELTA[n - 1].icono, S / 2, S * 0.4, S * 0.44, UBA.navy, 2.1);
-  ctx.fillStyle = color;
-  ctx.font = `900 74px ${FONT}`;
+  drawTopic(ctx, iconName, S / 2, S * 0.36, S * 0.42, '#7C7366', 2.0);
+  ctx.fillStyle = UBA.navy;
+  ctx.font = `900 92px ${FONT}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(String(n), S / 2, S * 0.76);
+  ctx.fillText(String(k), S / 2, S * 0.76);
   return toTexture(c, { anisotropy: 16 });
+}
+
+const DECAL = (() => {
+  const g = new THREE.PlaneGeometry(1, 1);
+  g.rotateX(-Math.PI / 2);
+  return g;
+})();
+
+function squareDecal(path, s, k, iconName, size) {
+  const { p, tangent, normal } = path.at(s);
+  const d = new THREE.Mesh(DECAL, new THREE.MeshStandardMaterial({ map: squareTexture(k, iconName), transparent: true, roughness: 0.45 }));
+  d.scale.setScalar(size);
+  d.position.set(p.x, Y.label, p.z);
+  d.rotation.y = -readableBaseline(tangent, normal).rot;
+  d.renderOrder = 2;
+  return d;
 }
 
 function checkerTexture() {
@@ -596,38 +595,24 @@ function checkerTexture() {
   return toTexture(c);
 }
 
+// The 40 squares look the same: the content squares, where the slides are,
+// can't be told from the passing ones. Square 40 is Destino.
 function buildLapSquares(group, M) {
-  const decal = new THREE.PlaneGeometry(1, 1);
-  decal.rotateX(-Math.PI / 2);
   for (let k = 1; k <= LAP_SQUARES; k++) {
     const s = lapS(k);
-    const z = LAP_ZONE_OF(k);
-    const n = CONTENT_AT.get(k);
-    const { p, tangent, normal } = LAP.at(s);
+    const { p, tangent } = LAP.at(s);
     if (k === LAP_SQUARES) {
-      const tile = shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.content.length, LAP_TILE.content.width / 2), M.paper));
-      group.add(tile);
-      const d = new THREE.Mesh(decal, new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.5 }));
-      d.scale.set(LAP_TILE.content.length - 0.12, 1, LAP_TILE.content.width - 0.12);
+      group.add(shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.length, LAP_TILE.width / 2), M.paper)));
+      const d = new THREE.Mesh(DECAL, new THREE.MeshStandardMaterial({ map: checkerTexture(), roughness: 0.5 }));
+      d.scale.set(LAP_TILE.length - 0.12, 1, LAP_TILE.width - 0.12);
       d.position.set(p.x, Y.label, p.z);
       d.rotation.y = Math.atan2(-tangent.z, tangent.x);
       group.add(d);
       continue;
     }
-    if (n) {
-      group.add(shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.content.length, LAP_TILE.content.width / 2), M.zones[z.id])));
-      const d = new THREE.Mesh(decal, new THREE.MeshStandardMaterial({ map: contentTexture(n, UBA.navy), transparent: true, roughness: 0.45 }));
-      d.scale.setScalar(1.42);
-      d.position.set(p.x, Y.label, p.z);
-      const { rot } = readableBaseline(tangent, normal);
-      d.rotation.y = -rot;
-      d.renderOrder = 2;
-      group.add(d);
-    } else {
-      group.add(shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.pass.length, LAP_TILE.pass.width / 2), M.pass)));
-      const { rot } = readableBaseline(tangent, normal);
-      group.add(textAt(String(k), p.x, p.z, { size: 0.42, weight: 900, color: '#A39886', rot, y: Y.label }));
-    }
+    const n = CONTENT_AT.get(k);
+    group.add(shadowed(new THREE.Mesh(tileGeometry(LAP, s, LAP_TILE.length, LAP_TILE.width / 2), M.pass)));
+    group.add(squareDecal(LAP, s, k, n ? VUELTA[n - 1].icono : iconFor(k, 3), 1.32));
   }
   const end = LAP.at(lapS(LAP_SQUARES));
   const at = end.p.clone().addScaledVector(end.normal, -(ROAD_WIDTH / 2 + 1.1));

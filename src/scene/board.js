@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
-import { BOARD, DESTINO_POS, ROAD_WIDTH } from './layout.js';
+import { BOARD, DESTINO_POS, LANDMARK_SPOTS, ROAD_WIDTH } from './layout.js';
 import { buildLandmarks, hidesLabel } from './landmarks.js';
 import { mergeStatic } from './merge.js';
 import { UBA } from './palette.js';
@@ -381,6 +381,7 @@ export function buildBoard(quality, title) {
     const spots = [];
     const rnd = seeded(seed);
     buildLandmarks(world, spots, space);
+    if (world === game) LANDMARK_SPOTS.push(...spots);
     buildTown(world, rnd, spots, space);
     buildTrees(world, rnd, spots, quality, space);
   }

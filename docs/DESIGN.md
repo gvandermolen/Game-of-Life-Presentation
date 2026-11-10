@@ -6,8 +6,8 @@ Presentación del Grupo 7 sobre el contrato de transporte (Contratos Civiles y C
 
 La clase tiene dos momentos sobre el mismo tablero:
 
-- **La vuelta**: exponemos el trabajo. Un auto, "Toda la clase", da una vuelta de 40 casillas; las 14 de contenido abren una diapositiva cada una.
-- **El juego**: los alumnos juegan. Cuatro autos piden un viaje en una app, pasan por la bifurcación y recorren sus carriles cayendo en casillas con casos y preguntas.
+- **La vuelta**: exponemos el trabajo. Un auto, "Toda la clase", da una vuelta de 40 casillas; las 13 de contenido abren una diapositiva cada una.
+- **El juego**: los alumnos juegan. Cuatro autos piden un viaje en una app, pasan por la bifurcación y recorren el mismo camino cayendo en casillas con casos y preguntas.
 
 Parece un *Juego de la Vida* con ruedita, pero es un guion fijo. La gracia se revela al final: la ruedita siempre dio el número necesario, el celular tenía 2 % de batería, la tarifa subió y todos aceptaron unos Términos y Condiciones que nadie leyó. Es el mismo contrato por adhesión que se analiza en el trabajo.
 
@@ -19,8 +19,9 @@ El texto completo está en `src/content/guion.js`; la especificación original, 
 | --- | --- |
 | Nombre | "Destino: Sano y Salvo", editable en el menú > Ajustes (se ve en la barra, el tablero, la ruedita y la pestaña) |
 | Dos tableros | La vuelta y el juego son dos caminos distintos sobre la misma mesa, con el río, la Facultad y el cartel en común |
-| La vuelta | Un solo camino de 40 casillas; las de contenido son de su zona, con icono y número |
-| El juego | Cuatro carriles paralelos de 20 casillas, uno por auto; cada auto avanza lo que marca la ruedita |
+| La vuelta | Un solo camino de 40 casillas, todas iguales: un dibujo y el número |
+| El juego | Un solo camino serpenteante de 19 casillas más Destino, compartido por los cuatro autos; cada auto avanza lo que marca la ruedita y nunca dos caen en la misma casilla |
+| Tarjetas | Se dan vuelta: adelante la situación y la pregunta; atrás, en otro color, la respuesta |
 | Ruedita | Del 1 al 10, arreglada: `GIROS_VUELTA` y `GIROS_JUEGO`. Frena con un "casi" en el número vecino |
 | Clics | Uno por cosa que pasa: girar, mostrar, cerrar. Nunca dos cosas con un solo clic |
 | Puntos | No hay. Las tarjetas plantean y responden; los expositores conducen la discusión |
@@ -37,30 +38,31 @@ El texto completo está en `src/content/guion.js`; la especificación original, 
 1. Vista general, con el auto en la Salida.
 2. Por cada casilla de contenido:
    1. Clic: gira la ruedita y el auto avanza casilla por casilla. Se abre la diapositiva con el título.
-   2. Clic: aparece el texto. En la casilla 5 (etapas) sale en 3 partes, en la 8 (eximentes) en 4 y en la 13 (intermediaria) en 2.
+   2. Clic: aparece el texto. En la casilla 8 (eximentes) sale en 4 partes y en la 12 (intermediaria) en 2; en las demás, todo junto.
    3. Clic: se cierra la diapositiva y vuelve la vista general.
-3. Después de la casilla 14, un último giro lleva el auto a Destino (casilla 40): sube la bandera a cuadros y aparece "¡Llegamos sanos y salvos!".
+3. Después de la casilla 13, un último giro lleva el auto a Destino (casilla 40): sube la bandera a cuadros y aparece "¡Llegamos sanos y salvos!".
 
-Las diapositivas ocupan la derecha de la pantalla, con el auto a la izquierda. Arriba, la zona, "Casilla N de 14" y el tema con su icono; el título es la frase grande. Cada una tiene un diseño propio (línea de tiempo, columnas, etapas, tarjetas, enfrentadas o renglones con una figura). Los artículos van al final del renglón, en gris y más chicos.
+Las diapositivas ocupan la derecha de la pantalla, con el auto a la izquierda. Arriba, la zona, "Casilla N de 13" y el tema con su icono; el título es la frase grande. Cada una tiene un diseño propio (línea de tiempo, columnas, etapas, tarjetas, enfrentadas o renglones con una figura o recuadros). Las referencias (arts., Ley) van al final del renglón, en gris y más chicas.
 
 ### El juego
 
 1. **Celular**: app Llevame, 22:10, batería 4 %, Facultad de Derecho → Casa, $12.500 con tarifa dinámica x1,8, letra chica, ACEPTAR. Al tocar: "¡Viaje confirmado!" y aparecen los cuatro autos frente al pórtico.
 2. **Bifurcación**, auto por auto (el panel dice qué grupo elige):
    - *Negociar los términos*: el auto choca contra una barrera, aparece el cartel "Contrato por adhesión: se acepta o no se viaja" y vuelve marcha atrás. El botón queda marcado "ya lo intentaron" para ese auto.
-   - *Leer los términos*: el auto frena bajo el pórtico y los términos pasan demasiado rápido (unos 15 segundos), primero en castellano y enseguida en inglés, sin detenerse en nada. Después sigue a su carril.
-   - *Aceptar sin leer*: directo a su carril.
+   - *Leer los términos*: el auto frena bajo el pórtico y los términos pasan demasiado rápido (unos 15 segundos), primero en castellano y enseguida en inglés, sin detenerse en nada. Después sigue hacia Inicio.
+   - *Aceptar sin leer*: directo a Inicio.
 3. **12 turnos**. En cada uno:
    1. Se resalta el auto de turno (anillo, nombre, ficha abajo).
    2. Clic: gira la ruedita.
-   3. Clic: el auto avanza por su carril hasta su casilla, con la animación que corresponda.
+   3. Clic: el auto avanza hasta su casilla, con la animación que corresponda. Si hay autos parados en el medio, los esquiva por el costado.
    4. Clic: se abre la tarjeta: título, situación y pregunta en negrita.
-   5. Clic: aparece la respuesta debajo, en otro color. Si hay opciones, las correctas se marcan en verde y la trampa en rojo.
+   5. Clic: la tarjeta se da vuelta y muestra la respuesta, en otro color. Si hay opciones, las correctas se marcan en verde y la trampa en rojo.
    6. Clic: se cierra la tarjeta y pasa el turno.
+4. **Última vuelta**: un turno más por auto, sin tarjeta. Clic: gira la ruedita (3, 4, 6 y 1). Clic: el auto llega a Destino. Después del cuarto, el cartel de Destino con papel picado.
 
 ### Final
 
-1. **Llegada**: los cuatro autos llegan a Destino. "Destino · Llegaron los cuatro autos".
+1. **Llegada**: los cuatro autos esperan en Destino. "Destino · Llegaron los cuatro autos".
 2. **Sentencias**: una tarjeta por auto, se da vuelta una por clic.
 3. **Ruedita**: "¿Se dieron cuenta de que siempre salió el número que necesitábamos?" Clic: la lista de todos los números que salieron en la vuelta y en el juego.
 4. **Celular final**: batería 2 %, $16.700, x2,4, con la batería y el precio marcados. "¿Y vieron cuánta batería tenía el celular?" Clic en la letra chica: los Términos y Condiciones del juego, cinco cláusulas en chiste.
@@ -79,7 +81,7 @@ Las diapositivas ocupan la derecha de la pantalla, con el auto a la izquierda. A
 | Turno | Animación | Qué pasa |
 | --- | --- | --- |
 | 1 | `choque` | "Zzz…": la pasajera duerme, el auto se despista, choca un árbol y un semáforo y vuelca |
-| 2 | `alcance` | El auto 2 frena en un semáforo en rojo; el auto 1, que está atrás, se cruza a su carril, lo choca y vuelve |
+| 2 | `alcance` | El auto 2 frena en un semáforo en rojo; el auto 1, que está justo atrás, lo choca de atrás y retrocede |
 | 3 | `pozo` | El auto cae en un pozo entre dos casillas: "¡Ay!" y un chichón |
 | 5, 8, 9 | `martillo` | Golpes de martillo de juez |
 | 6 | `perroTormenta` | Cruza un perro, frenada fuerte; después alerta naranja, lluvia, relámpagos y una rama que cae sobre el techo |
@@ -88,8 +90,8 @@ Las diapositivas ocupan la derecha de la pantalla, con el auto a la izquierda. A
 
 ## Tableros
 
-- **La vuelta**: de la Salida, junto a la Facultad, el camino sube serpenteando alrededor de la ruedita hasta Destino, con la bandera a cuadros. Las casillas de contenido tienen el color de su zona y un icono; las demás, solo un número chico. Un cartel de ruta marca el comienzo de cada zona.
-- **El juego**: de la Facultad, el pórtico de la bifurcación con sus tres caminos (el de negociar termina en la barrera), la línea de Inicio y los cuatro carriles paralelos con líneas punteadas, hasta la línea de Destino frente a la casa. Las casillas de tarjeta tienen el color del auto y un número grande.
+- **La vuelta**: de la Salida, junto a la Facultad, el camino sube serpenteando alrededor de la ruedita hasta Destino, con la bandera a cuadros. Todas las casillas son iguales: un dibujo y el número; la 40 es a cuadros. Un cartel de ruta marca el comienzo de cada zona.
+- **El juego**: de la Facultad, el pórtico de la bifurcación con sus tres caminos (el de negociar termina en la barrera), la línea de Inicio con los cuatro autos uno al lado del otro y un solo camino que serpentea hasta la línea de Destino frente a la casa, donde se vuelve a abrir para los cuatro. Todas las casillas son iguales, con un dibujo al azar y el número: no se nota cuáles tienen tarjeta.
 - Las tres zonas (Embarco, Viaje, Desembarco) tiñen el fondo y llevan su nombre impreso.
 - Barrios y monumentos de Buenos Aires, con sus nombres sin pisar caminos ni utilería.
 

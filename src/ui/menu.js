@@ -15,8 +15,8 @@ export function chapterName(s) {
     case 'bifurcacion':
       return `La bifurcación · ${AUTOS[s.car].grupo}`;
     case 'turno': {
-      const { car } = turnInfo(s.turn);
-      return `Turno ${s.turn + 1} · ${AUTOS[car].grupo}: ${casilla(s.turn).titulo}`;
+      const { car, final } = turnInfo(s.turn);
+      return final ? `Hacia Destino · ${AUTOS[car].grupo}` : `Turno ${s.turn + 1} · ${AUTOS[car].grupo}: ${casilla(s.turn).titulo}`;
     }
     case 'llegada':
       return 'Llegada a Destino';

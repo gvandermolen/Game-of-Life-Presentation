@@ -10,6 +10,7 @@ import {
   DESTINO_LINE,
   DESTINO_S,
   ENTRY,
+  GAME_HALF,
   INICIO_LINE,
   INICIO_S,
   LANES,
@@ -17,6 +18,7 @@ import {
   LANE_TILE,
   LANES_HALF,
   MAIN,
+  PASS_OFFSET,
   PATHS,
   RIVER_WIDTH,
   ROAD_WIDTH,
@@ -28,6 +30,8 @@ import {
   distanceToRoads,
   forkRoute,
   forkSlot,
+  freeSide,
+  passingLane,
   riverDistance,
   squareS,
   zoneLabelAt,
@@ -40,33 +44,48 @@ const samples = (path, step = 0.2) => range(Math.ceil(path.length / step) + 1).m
 // Diameter of a game piece on the board (base radius 0.54 at the game scale).
 const PIECE = 2 * 0.54 * 1.05;
 
-test('20 squares per lane, in order, with a visible gap between tiles', () => {
-  for (const k of range(LANE_SQUARES - 1, 1)) {
+test('19 squares on one road, in order, with a visible gap between tiles; square 20 is Destino', () => {
+  for (const k of range(LANE_SQUARES - 2, 1)) {
     const gap = squareS(k + 1) - squareS(k) - LANE_TILE.length;
-    assert.ok(gap >= 0.3, `squares ${k}-${k + 1} gap ${gap.toFixed(2)}`);
+    assert.ok(gap >= 0.6, `squares ${k}-${k + 1} gap ${gap.toFixed(2)}`);
   }
-  assert.ok(squareS(LANE_SQUARES) + LANE_TILE.length / 2 < DESTINO_LINE - 0.1, 'last square on the Destino line');
+  assert.ok(squareS(LANE_SQUARES - 1) + LANE_TILE.length / 2 < DESTINO_LINE - 2, 'square 19 before Destino opens');
+  assert.equal(squareS(LANE_SQUARES), DESTINO_S);
   assert.ok(DESTINO_LINE + 0.6 < DESTINO_S && DESTINO_S < MAIN.length, 'cars at Destino past the line');
 });
 
-test('cars waiting at Inicio stand in open lanes, before the line and square 1', () => {
-  assert.ok(INICIO_S > TAPER, 'lanes still merging at Inicio');
+test('one car wide on the squares; four side by side at Inicio and Destino', () => {
+  assert.ok(INICIO_S > TAPER, 'road still opening at Inicio');
   assert.ok(INICIO_S + PIECE / 2 < INICIO_LINE, 'car on the Inicio line');
   assert.ok(INICIO_LINE + 0.3 < squareS(1) - LANE_TILE.length / 2, 'Inicio line on square 1');
-});
-
-test('neighbouring lanes are wider apart than a piece', () => {
-  assert.ok(LANE_GAP > PIECE + 0.15, `lanes ${LANE_GAP} for pieces ${PIECE.toFixed(2)}`);
-  for (const s of [INICIO_S, squareS(5), squareS(10), squareS(15), DESTINO_S]) {
+  assert.ok(LANE_GAP > PIECE + 0.15, `places ${LANE_GAP} for pieces ${PIECE.toFixed(2)}`);
+  for (const s of [INICIO_S, DESTINO_S]) {
     for (const c of range(CARS - 1)) {
       const d = LANES[c].at(s).p.distanceTo(LANES[c + 1].at(s).p);
-      assert.ok(d > PIECE + 0.1, `lanes ${c}-${c + 1} at ${s.toFixed(1)}: ${d.toFixed(2)}`);
+      assert.ok(d > PIECE + 0.1, `places ${c}-${c + 1} at ${s.toFixed(1)}: ${d.toFixed(2)}`);
     }
+    assert.ok(LANES[0].at(s).p.distanceTo(MAIN.at(s).p) + PIECE / 2 < boardHalf(s), 'outer car on the asphalt');
+  }
+  for (const k of range(LANE_SQUARES - 1, 1)) {
+    for (const c of range(CARS)) assert.ok(LANES[c].at(squareS(k)).p.distanceTo(MAIN.at(squareS(k)).p) < 0.01, `car ${c} centred on square ${k}`);
   }
 });
 
-test('every card square is on its lane', () => {
+test('a car passing a parked one steps aside without touching it, and is back on line at its square', () => {
+  assert.ok(PASS_OFFSET > PIECE + 0.05, `pass offset ${PASS_OFFSET} for pieces ${PIECE.toFixed(2)}`);
+  const parked = squareS(8);
+  const lane = passingLane(3, squareS(5), squareS(11), [parked, squareS(12), squareS(4)]);
+  assert.deepEqual(lane.passing, [parked], 'only the cars in between');
+  for (let s = squareS(5); s <= squareS(11); s += 0.05) {
+    assert.ok(lane.at(s).p.distanceTo(MAIN.at(parked).p) > PIECE, `touches the parked car at ${s.toFixed(2)}`);
+  }
+  for (const k of [5, 11]) assert.ok(lane.at(squareS(k)).p.distanceTo(MAIN.at(squareS(k)).p) < 0.01, `off its square ${k}`);
+  assert.ok(PASS_OFFSET + PIECE / 2 < GAME_HALF + 0.5, 'passing stays near the asphalt');
+});
+
+test('card squares are on the road, and props have a free side everywhere', () => {
   for (const [c, list] of LANE_POS.entries()) for (const k of list) assert.ok(k >= 1 && k <= LANE_SQUARES, `car ${c} square ${k}`);
+  for (const k of range(LANE_SQUARES - 1, 1)) assert.ok([1, -1].includes(freeSide(squareS(k))));
 });
 
 test('reading and accepting lead into every lane; negotiating is a dead end', () => {
@@ -140,7 +159,7 @@ test('no road or lane bends tighter than a tile is wide', () => {
     }
   };
   for (const path of [...PATHS, LAP]) check(path, ROAD_WIDTH / 2);
-  for (const lane of LANES) check(lane, LANE_TILE.width / 2 + 0.05, TAPER);
+  check(MAIN, LANE_TILE.width / 2 + 0.05, squareS(1) - LANE_TILE.length);
   assert.deepEqual(tight.slice(0, 5), []);
 });
 
@@ -152,15 +171,10 @@ test('zone names stand off the board', () => {
   }
 });
 
-test('lap: 40 squares with gaps, content squares where the spins land', () => {
-  for (const k of range(LAP_SQUARES - 1, 1)) {
-    const len = (n) => (CONTENT_AT.has(n) ? LAP_TILE.content.length : LAP_TILE.pass.length);
-    const gap = lapS(k + 1) - lapS(k) - (len(k) + len(k + 1)) / 2;
-    assert.ok(gap >= 0.12, `lap squares ${k}-${k + 1} gap ${gap.toFixed(2)}`);
-  }
-  assert.ok(LAP_STEP > 1.8);
-  assert.equal(CONTENT_AT.size, 14);
-  assert.deepEqual([...CONTENT_AT.keys()], LAP_POS.slice(0, 14));
+test('lap: 40 squares of one size with gaps, content squares where the spins land', () => {
+  assert.ok(LAP_STEP - LAP_TILE.length >= 0.3, `lap gap ${(LAP_STEP - LAP_TILE.length).toFixed(2)}`);
+  assert.equal(CONTENT_AT.size, 13);
+  assert.deepEqual([...CONTENT_AT.keys()], LAP_POS.slice(0, 13));
   assert.ok(lapS(LAP_SQUARES) < LAP.length);
 });
 

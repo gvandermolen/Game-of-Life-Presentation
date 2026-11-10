@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import { RoundedBoxGeometry } from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 import { CARS } from '../engine/flow.js';
-import { BARRIER_S, CAR_GAP, ENTRY, INICIO_S, LANES, LANES_HALF, LANE_TILE, MAIN, SQUARE_STEP, forkRoute, forkSlot, laneOffset } from './layout.js';
+import { BARRIER_S, CAR_GAP, ENTRY, INICIO_S, LANES, MAIN, SQUARE_STEP, boardHalf, forkRoute, forkSlot, freeSide, verge } from './layout.js';
 import { easeInOut } from './stage.js';
 
 // Animations played on the board before a card opens, and the props they use.
 // Each one moves the car to its square itself, so it can zigzag, brake or crash
-// on the way. Props stay on the board until the next turn starts.
+// on the way. `lane` is the car's way for this move, stepping round the cars
+// parked on the single road. Props stay on the board until the next turn starts.
 
 function plastic(color, extra = {}) {
   return new THREE.MeshPhysicalMaterial({ color, roughness: 0.34, clearcoat: 0.6, clearcoatRoughness: 0.25, ...extra });
@@ -227,18 +228,8 @@ function wings() {
 
 // ---------------------------------------------------------------- helpers
 
-// Props stand beside the board: outside the loop for cars 1 and 2, inside for
-// cars 3 and 4 (sign along the centre line's normal).
-const sideOf = (car) => (car < CARS / 2 ? -1 : 1);
-
-// Point beside the board at centre-line arc length s, `extra` past the lanes.
-function verge(s, side, extra) {
-  const f = MAIN.at(s);
-  return { pos: f.p.clone().addScaledVector(f.normal, side * (LANES_HALF + extra)), frame: f };
-}
-
-// Stand a prop beside the board, turned to the road. Its own rotation.x then
-// tips it about the road direction: positive towards +normal.
+// Stand a prop beside the road, turned to it. Its own rotation.x then tips it
+// about the road direction: positive towards +normal.
 function stand(obj, s, side, extra) {
   const { pos, frame } = verge(s, side, extra);
   const g = new THREE.Group();
@@ -277,9 +268,8 @@ const ROOF = 0.5;
 
 // Car 1, El viaje: the passenger sleeps, the car zigzags, hits a traffic light
 // and a tree, and rolls over.
-async function choque(stage, { car, fromS, toS, sound, ui }) {
-  const lane = LANES[car];
-  const side = sideOf(car);
+async function choque(stage, { car, fromS, toS, lane, sound, ui }) {
+  const side = freeSide(toS);
   const light = trafficLight(false);
   const lightStand = stand(light, toS - 0.75, side, 0.55);
   const t = tree(1.05);
@@ -289,11 +279,12 @@ async function choque(stage, { car, fromS, toS, sound, ui }) {
 
   const sA = toS - 1.5;
   await stage.drive(car, fromS, sA, {
+    path: lane,
     seconds: 2.4,
     shape: (k) => ({ lateral: Math.sin(k * Math.PI * 5) * 0.45 * k, yaw: Math.cos(k * Math.PI * 5) * 0.45 * k }),
   });
-  // Into the traffic light, which falls away from the road.
-  const hit = side * 0.95;
+  // Off the road into the traffic light, which falls away from it.
+  const hit = side * (boardHalf(toS) + 0.1);
   await stage.task(stage.dur(0.32), (k) => stage.pose(car, lane.at(sA + 0.75 * k), { lateral: hit * easeIn(k), yaw: side * 0.5 * k }));
   sound.crash();
   const fall = stage.task(stage.dur(0.6), (k) => {
@@ -312,53 +303,60 @@ async function choque(stage, { car, fromS, toS, sound, ui }) {
     const e = easeInOut(k);
     stage.pose(car, lane.at(sB + (toS - sB) * e), { lateral: hit * (1 - e), yaw: side * -0.4 * (1 - e), roll: -side * e * Math.PI * 2, lift: Math.sin(k * Math.PI) * 0.9 });
   });
-  stage.place(car, lane, toS);
+  stage.place(car, LANES[car], toS);
   await fall;
   await stage.jolt(car, 0.6, 0.4);
 }
 
-// Car 2, Me chocaron de atrás: stopped at a red light, car 1 swerves into its
-// lane, hits it from behind and goes back to its own lane.
-async function alcance(stage, { car, fromS, toS, sound }) {
+// Car 2, Me chocaron de atrás: stopped at a red light, right in front of car 1,
+// which drives on and hits it from behind, then backs up to its square.
+async function alcance(stage, { car, fromS, toS, lane, sound }) {
   const hitter = 0;
-  popIn(stage, stand(trafficLight(true), toS + 1.0, -1, 0.5));
-  await stage.drive(car, fromS, toS);
+  popIn(stage, stand(trafficLight(true), toS + 1.0, freeSide(toS + 1.0), 0.5));
+  await stage.drive(car, fromS, toS, { path: lane });
+  stage.place(car, LANES[car], toS);
   await stage.wait(0.4);
   const from = stage.at[hitter].s;
   const contact = toS - CAR_GAP * 0.8;
-  const across = laneOffset(car, toS) - laneOffset(hitter, toS);
   sound.horn();
-  await stage.drive(hitter, from, contact, {
-    seconds: 0.95,
-    ease: easeIn,
-    shape: (k) => ({ lateral: across * smooth(k * 1.7), yaw: Math.sin(Math.min(1, k * 1.7) * Math.PI) * 0.45 * Math.sign(across) }),
-  });
+  await stage.drive(hitter, from, contact, { path: LANES[hitter], seconds: 0.95, ease: easeIn });
   sound.crash();
-  stage.burst(LANES[car].at((contact + toS) / 2).p);
+  stage.burst(MAIN.at((contact + toS) / 2).p);
   await Promise.all([
     stage.task(stage.dur(0.45), (k) => stage.pose(car, LANES[car].at(toS + Math.sin(k * Math.PI) * 0.4))),
     stage.jolt(car, 1.2, 0.6),
-    stage.task(stage.dur(0.5), (k) => stage.pose(hitter, LANES[hitter].at(contact), { lateral: across })),
+    stage.task(stage.dur(0.5), (k) => stage.pose(hitter, LANES[hitter].at(contact - Math.sin(k * Math.PI) * 0.25))),
   ]);
   await stage.wait(0.35);
   sound.reverse();
-  await stage.drive(hitter, contact, from, {
-    seconds: 1.3,
-    shape: (k) => ({ lateral: across * (1 - smooth(k * 1.3)), yaw: -Math.sin(Math.min(1, k * 1.3) * Math.PI) * 0.35 * Math.sign(across) }),
-  });
+  await stage.drive(hitter, contact, from, { path: LANES[hitter], seconds: 1.3 });
   stage.place(hitter, LANES[hitter], from);
   stage.place(car, LANES[car], toS);
 }
 
-// Car 2, El perro y la tormenta: a dog runs across halfway and the car brakes
-// hard; then the orange alert, rain, and a branch falls on the roof.
-async function perroTormenta(stage, { car, fromS, toS, sound, ui }) {
-  const lane = LANES[car];
-  const side = sideOf(car);
-  const mid = fromS + (toS - fromS) * 0.45;
-  const cross = mid + 1.0;
+// The clearest stretch of a drive: the point between fromS + lead and
+// toS - tail farthest from every parked car.
+function clearSpot(fromS, toS, parked, lead, tail) {
+  let best = (fromS + toS) / 2;
+  let room = -Infinity;
+  for (let s = fromS + lead; s <= toS - tail; s += 0.1) {
+    const d = Math.min(...parked.map((p) => Math.abs(p - s)), s - fromS, toS - s);
+    if (d > room) {
+      room = d;
+      best = s;
+    }
+  }
+  return best;
+}
+
+// Car 2, El perro y la tormenta: a dog runs across a clear stretch and the car
+// brakes hard; then the orange alert, rain, and a branch falls on the roof.
+async function perroTormenta(stage, { car, fromS, toS, lane, sound, ui }) {
+  const cross = clearSpot(fromS, toS, lane.passing, 3.4, 3.4);
+  const mid = cross - 1.0;
+  const side = freeSide(cross);
   const d = dog();
-  const reach = LANES_HALF + 1.2;
+  const reach = boardHalf(cross) + 1.2;
   const placeDog = (lat, yaw) => {
     const f = MAIN.at(cross);
     d.position.copy(f.p).addScaledVector(f.normal, lat);
@@ -370,7 +368,7 @@ async function perroTormenta(stage, { car, fromS, toS, sound, ui }) {
   };
   placeDog(side * reach, -side * Math.PI * 0.5);
   const sBrake = mid - 1.4;
-  const drive = stage.drive(car, fromS, sBrake, { seconds: 1.8, ease: easeIn });
+  const drive = stage.drive(car, fromS, sBrake, { path: lane, seconds: 1.8, ease: easeIn });
   await stage.wait(0.9);
   stage.fx.add(d);
   sound.bark();
@@ -384,7 +382,7 @@ async function perroTormenta(stage, { car, fromS, toS, sound, ui }) {
   await stage.task(stage.dur(0.55), (k) => {
     stage.pose(car, lane.at(sBrake + (mid - sBrake) * easeOut(k)), { pitch: -Math.sin(Math.min(1, k * 1.4) * Math.PI) * 0.26 });
   });
-  stage.place(car, lane, mid);
+  stage.at[car] = { path: lane, s: mid };
   await dash;
   sound.bark();
   await stage.task(stage.dur(0.8), (k) => {
@@ -407,12 +405,13 @@ async function perroTormenta(stage, { car, fromS, toS, sound, ui }) {
     stage.setDim(lvl);
   };
   const t = tree(1.6);
-  popIn(stage, stand(t, toS + 0.2, side, 1.0), 0.35);
+  popIn(stage, stand(t, toS + 0.2, freeSide(toS + 0.2), 1.0), 0.35);
   flash();
-  const go = stage.drive(car, mid, toS, { seconds: 2.4 });
+  const go = stage.drive(car, mid, toS, { path: lane, seconds: 1.6 + (toS - mid) * 0.09 });
   await stage.wait(1.2);
   flash();
   await go;
+  stage.place(car, LANES[car], toS);
   // The tree shakes and a branch drops onto the roof.
   stage.task(stage.dur(0.7), (k) => {
     t.rotation.x = Math.sin(k * 26) * 0.1 * (1 - k);
@@ -436,22 +435,22 @@ async function perroTormenta(stage, { car, fromS, toS, sound, ui }) {
 
 // Car 2, Me bajo acá: late for the exam, the passenger jumps out of the moving
 // car and rolls over the grass.
-async function salto(stage, { car, fromS, toS, sound, ui, casilla }) {
-  const side = sideOf(car);
+async function salto(stage, { car, fromS, toS, lane, sound, ui, casilla }) {
   const p = person();
   ui.bubble('tarde', () => stage.pieceTop(car), 2.1, casilla.reloj);
   await stage.wait(1.6);
-  const seconds = 3.2;
-  const drive = stage.drive(car, fromS, toS, { seconds });
+  const seconds = 3.6;
+  const drive = stage.drive(car, fromS, toS, { path: lane, seconds });
   await stage.wait(1.0);
   ui.bubble('salto', () => stage.pieceTop(car), 1.9);
   sound.horn();
   await stage.wait(0.35);
   // Where the car is now along its drive.
   const s0 = fromS + (toS - fromS) * easeInOut(1.35 / seconds);
+  const side = freeSide(s0 + 1.2);
   const at = (s) => MAIN.at(s);
-  const lat0 = laneOffset(car, s0);
-  const lat1 = side * (LANES_HALF + 1.1);
+  const lat0 = lane.lateral(s0);
+  const lat1 = side * (boardHalf(s0) + 1.1);
   stage.fx.add(p);
   // Out of the door and through the air, sideways off the road.
   await stage.task(stage.dur(0.7), (k) => {
@@ -472,12 +471,12 @@ async function salto(stage, { car, fromS, toS, sound, ui, casilla }) {
   });
   p.userData.pivot.rotation.x = side * Math.PI * 0.5;
   await drive;
+  stage.place(car, LANES[car], toS);
 }
 
 // Car 3, El pozo: a pothole, a jump, "¡AY!" and a bump on the roof.
-async function pozo(stage, { car, fromS, toS, sound, ui }) {
-  const lane = LANES[car];
-  const holeS = toS - LANE_TILE.length / 2 - (SQUARE_STEP - LANE_TILE.length) / 2;
+async function pozo(stage, { car, fromS, toS, lane, sound, ui }) {
+  const holeS = toS - SQUARE_STEP / 2;
   const hole = pothole();
   const f = lane.at(holeS);
   hole.position.set(f.p.x, 0, f.p.z);
@@ -485,6 +484,7 @@ async function pozo(stage, { car, fromS, toS, sound, ui }) {
   await popIn(stage, hole, 0.35);
   let hit = false;
   await stage.drive(car, fromS, toS, {
+    path: lane,
     seconds: 2.6,
     shape: (k, s) => {
       const d = s - holeS;
@@ -497,6 +497,7 @@ async function pozo(stage, { car, fromS, toS, sound, ui }) {
       return { lift, pitch: d > -0.1 && d < 0.5 ? -0.2 : 0 };
     },
   });
+  stage.place(car, LANES[car], toS);
   ui.bubble('ay', () => stage.pieceTop(car), 2.4);
   sound.knock();
   const bump = stage.attach(car, mesh(new THREE.SphereGeometry(0.11, 16, 12), M.bump, -0.05, ROOF - 0.03, 0));
@@ -507,32 +508,34 @@ async function pozo(stage, { car, fromS, toS, sound, ui }) {
   await stage.wait(0.8);
 }
 
-// Car 3, Ámsterdam: the car grows wings, takes off, flies and lands; then two
-// windmills and an English-speaking judge in a wig.
-async function amsterdam(stage, { car, fromS, toS, sound, ui }) {
-  const lane = LANES[car];
-  const side = sideOf(car);
+// Car 3, Ámsterdam: the car grows wings, takes off over the cars ahead, flies
+// and lands on its square; then two windmills and an English-speaking judge.
+async function amsterdam(stage, { car, fromS, toS, lane, sound, ui }) {
+  const side = freeSide(toS);
   const w = stage.attach(car, wings());
   sound.whoosh();
   await stage.task(stage.dur(0.4), (k) => w.scale.set(1, 1, Math.max(0.001, easeOut(k))));
   const len = toS - fromS;
-  const up = fromS + len * 0.3;
-  const down = fromS + len * 0.8;
+  const up = fromS + Math.min(len * 0.2, 3.5);
+  const climb = Math.min(len * 0.15, 4.5);
+  const landLen = SQUARE_STEP * 0.55;
+  const down = toS - landLen - 0.7;
   await stage.drive(car, fromS, toS, {
+    path: lane,
     seconds: 3.8,
     ease: (k) => k,
     shape: (k, s) => {
-      const climb = smooth((s - up) / (len * 0.15));
-      const land = smooth((s - down) / (len * 0.15));
-      const lift = 2.4 * climb * (1 - land);
-      const pitch = (s > up && s < up + len * 0.15 ? 0.3 : 0) + (s > down && s < down + len * 0.15 ? -0.18 : 0);
-      return { lift: lift + Math.sin(k * 20) * 0.04 * climb * (1 - land), pitch };
+      const c = smooth((s - up) / climb);
+      const land = smooth((s - down) / landLen);
+      const lift = 2.4 * c * (1 - land);
+      const pitch = (s > up && s < up + climb ? 0.3 : 0) + (s > down && s < down + landLen ? -0.18 : 0);
+      return { lift: lift + Math.sin(k * 20) * 0.04 * c * (1 - land), pitch };
     },
   });
   sound.thud();
   await stage.task(stage.dur(0.3), (k) => w.scale.set(1, 1, Math.max(0.001, 1 - k)));
   stage.pieces[car].userData.vehicle.remove(w);
-  stage.place(car, lane, toS);
+  stage.place(car, LANES[car], toS);
 
   const mills = [
     [toS + 0.9, 1.7],
@@ -564,8 +567,9 @@ async function martillo(stage, ctx) {
   await ctx.ui.gavel();
 }
 
-function plain(stage, { car, fromS, toS }) {
-  return stage.drive(car, fromS, toS);
+async function plain(stage, { car, fromS, toS, lane }) {
+  await stage.drive(car, fromS, toS, { path: lane });
+  stage.place(car, LANES[car], toS);
 }
 
 export const TURN_FX = { choque, alcance, perroTormenta, salto, pozo, amsterdam, martillo };

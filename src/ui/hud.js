@@ -87,16 +87,18 @@ export class Hud {
     const turn = this.top.querySelector('.turn');
     const lastVerdict = state.phase === 'sentencias' && state.shown >= AUTOS.length;
     let hint = lastVerdict ? '<kbd>Espacio</kbd> la ruedita' : HINTS[state.phase === 'turno' ? state.step : state.phase];
+    if (state.phase === 'turno' && turnInfo(state.turn).final && state.step === 'girado') hint = '<kbd>Espacio</kbd> llegar a Destino';
     if (state.phase === 'ruedita' && !state.lista) hint = '<kbd>Espacio</kbd> ver los números';
     if (state.phase === 'turno') {
-      const { car, square } = turnInfo(state.turn);
+      const { car, square, final } = turnInfo(state.turn);
       const a = AUTOS[car];
       const c = casilla(state.turn);
       const open = ['pregunta', 'respuesta'].includes(state.step);
+      const label = final ? 'Última vuelta · hacia Destino' : `Turno ${state.turn + 1} de ${TURNS}${state.step === 'listo' ? '' : ` · Casilla ${square}`}${open ? ` · ${esc(c.titulo)}` : ''}`;
       turn.style.setProperty('--team', a.color);
       turn.innerHTML = `
         <div class="turn-chip">${vehicleSVG(a.vehiculo, a.color)}</div>
-        <div><div class="turn-label">Turno ${state.turn + 1} de ${TURNS}${state.step === 'listo' ? '' : ` · Casilla ${square}`}${open ? ` · ${esc(c.titulo)}` : ''}</div><div class="turn-name">${esc(a.grupo)} · ${esc(a.nombre)}</div></div>
+        <div><div class="turn-label">${label}</div><div class="turn-name">${esc(a.grupo)} · ${esc(a.nombre)}</div></div>
         <div class="turn-hint">${hint}</div>`;
       turn.classList.remove('hidden');
     } else if (state.phase === 'vuelta') {
@@ -139,12 +141,29 @@ export class Hud {
   // Called every frame: keep each tag over its car.
   updateTags() {
     const st = this.app.stage;
-    this.tagNodes.forEach((node, c) => {
+    const at = this.tagNodes.map((node, c) => {
       const piece = st.pieces[c];
-      const p = piece?.visible ? st.screenOf(st.pieceTop(c, 1.3)) : null;
+      return piece?.visible ? st.screenOf(st.pieceTop(c, 1.3)) : null;
+    });
+    // Cars side by side (at Inicio and Destino) would cover each other's tags:
+    // in a row, every other one goes up; in a column, they move beside the car.
+    const shown = at.map((p, c) => c).filter((c) => at[c]);
+    const near = (a, b, dx, dy) => Math.abs(at[a].x - at[b].x) < dx && Math.abs(at[a].y - at[b].y) < dy;
+    const beside = shown.map((c) => shown.some((o) => o !== c && near(c, o, 80, 110) && Math.abs(at[c].y - at[o].y) > 30));
+    const lift = new Array(at.length).fill(0);
+    const row = shown.filter((c, i) => !beside[i]).sort((a, b) => at[a].x - at[b].x);
+    row.forEach((c, i) => {
+      const prev = row[i - 1];
+      if (prev != null && near(c, prev, 80, 30) && !lift[prev]) lift[c] = 26;
+    });
+    this.tagNodes.forEach((node, c) => {
+      const p = at[c];
       node.classList.toggle('on', !!p);
       node.classList.toggle('active', c === st.activeIndex);
-      if (p) node.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px) translate(-50%, -100%)`;
+      if (!p) return;
+      node.style.transform = beside[shown.indexOf(c)]
+        ? `translate(${(p.x + 34).toFixed(1)}px, ${(p.y + 24).toFixed(1)}px) translate(0, -50%)`
+        : `translate(${p.x.toFixed(1)}px, ${(p.y - lift[c]).toFixed(1)}px) translate(-50%, -100%)`;
     });
   }
 }

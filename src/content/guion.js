@@ -3,9 +3,10 @@
 // the students answer, the presenters resolve that out loud.
 //
 // Two parts follow each other on the same page: the explanatory lap (one car,
-// fourteen slides) and the game (four cars, twelve cards).
-// Article numbers written as "(art. 1280)" or "(arts. 984 a 989)" are shown
-// smaller and in grey at the end of the line.
+// thirteen slides) and the game (four cars, twelve cards).
+// References written in brackets at the end of a sentence, like "(Art. 1280)",
+// "(Arts. 984 a 989)" or "(Ley 24.240 …)", are shown smaller and in grey at the
+// end of the line.
 
 export const TITULO = 'Destino: Sano y Salvo';
 export const SUBTITULO = 'Contratos Civiles y Comerciales · Facultad de Derecho (UBA) · Grupo 7';
@@ -18,19 +19,19 @@ export const TEMA = 'Contrato de transporte';
 export const ZONAS = [
   { id: 'embarco', nombre: 'Embarco', tema: 'El contrato', color: '#91BDE1', desde: 1, hasta: 6 },
   { id: 'viaje', nombre: 'Viaje', tema: 'La responsabilidad', color: '#F7A600', desde: 7, hasta: 10 },
-  { id: 'desembarco', nombre: 'Desembarco', tema: 'Las plataformas', color: '#3BC3AD', desde: 11, hasta: 14 },
+  { id: 'desembarco', nombre: 'Desembarco', tema: 'Las plataformas', color: '#3BC3AD', desde: 11, hasta: 13 },
 ];
 
 // Rigged spinner of the lap: one number per spin. The last one reaches Destino.
-// The car really moves that many squares, so the 14 slides land on
-// 3, 5, 9, 10, 13, 18, 20, 23, 25, 29, 30, 33, 35, 38 and Destino is 40.
-export const GIROS_VUELTA = [3, 2, 4, 1, 3, 5, 2, 3, 2, 4, 1, 3, 2, 3, 2];
+// The car really moves that many squares, so the 13 slides land on
+// 3, 5, 9, 10, 13, 18, 20, 23, 25, 29, 30, 35, 38 and Destino is 40.
+export const GIROS_VUELTA = [3, 2, 4, 1, 3, 5, 2, 3, 2, 4, 1, 5, 3, 2];
 export const CASILLAS_VUELTA = 40;
 
 export const AUTO_VUELTA = { nombre: 'Toda la clase', color: '#F7A600', vehiculo: 'auto' };
 
 // One slide per content square. `diseno` picks the layout; `partes` is how many
-// clicks reveal the body (default 1).
+// clicks reveal the body (default 1). A `recuadro` is a box at the bottom.
 export const VUELTA = [
   {
     tema: 'Historia y evolución',
@@ -38,23 +39,25 @@ export const VUELTA = [
     titulo: 'Historia y evolución del contrato',
     diseno: 'linea',
     hitos: [
-      { fecha: 'Código de Comercio', texto: 'El transportista responde por los daños al viajero, salvo que pruebe una eximente (art. 184)' },
-      { fecha: '1994', texto: 'La Constitución suma el derecho de los usuarios a la seguridad (art. 42 CN)' },
-      { fecha: '2008 y 2010', texto: 'La Corte lo aplica al transporte (Ledesma y Uriarte Martínez)' },
-      { fecha: '2015', texto: 'El Código Civil y Comercial regula el contrato (arts. 1280 a 1318)' },
+      {
+        fecha: '1862',
+        texto: 'El Código de Comercio le dedicaba los artículos 162 a 206, pensados para el transporte terrestre y ferroviario. Obligaba al porteador a responder por los daños sufridos por el viajero (Art. 184)',
+      },
+      { fecha: '1994', texto: 'La Constitución reconoce los derechos de los consumidores, entre ellos a la seguridad (Art. 42)' },
+      { fecha: '2008 y 2010', texto: 'La CSJN lo aplica al transporte', nota: 'Ledesma y Uriarte Martínez' },
+      { fecha: '2015', texto: 'El Código Civil y Comercial regula el contrato (Arts. 1280 a 1318)' },
     ],
   },
   {
     tema: 'Definición, partes y clases de transporte',
     icono: 'contrato',
-    titulo: '¿Qué es el contrato de transporte?',
+    titulo: 'Definición y régimen legal aplicable',
     diseno: 'renglones',
     renglones: [
-      'Las partes: el transportista se obliga a trasladar personas o cosas, y el pasajero o el cargador a pagar un precio (art. 1280)',
-      'Si alguien te lleva por cortesía, como un amigo, no hay contrato',
-      'El viaje gratuito queda afuera, salvo que lo haga quien ofrece el servicio al público (art. 1282)',
-      'Un viaje por app es transporte de personas, terrestre, urbano y oneroso',
+      'Hay contrato de transporte “cuando una parte llamada transportista o porteador se obliga a trasladar personas o cosas de un lugar a otro, y la otra, llamada pasajero o cargador, se obliga a pagar un precio o flete” (Art. 1280)',
+      'Las reglas del capítulo se aplican cualquiera sea el medio empleado, excepto lo dispuesto en leyes especiales (Art. 1281)',
     ],
+    recuadros: ['Según su objeto', 'Según el medio empleado', 'Según su ámbito', 'Según la existencia de un precio'],
   },
   {
     tema: 'Personas y cosas',
@@ -62,21 +65,28 @@ export const VUELTA = [
     titulo: 'Personas y cosas: dos regímenes distintos',
     diseno: 'columnas',
     columnas: [
-      { icono: 'persona', titulo: 'Personas', renglones: ['Hay que llevarlas sanas y salvas', 'No se puede limitar la responsabilidad por daños corporales (art. 1292)'] },
-      { icono: 'caja', titulo: 'Cosas', renglones: ['Hay que entregarlas en el mismo estado', 'En cosas frágiles se puede pactar responder solo por culpa'] },
+      {
+        icono: 'persona',
+        titulo: 'Personas',
+        renglones: ['Ticket/Billete/Pasaje', 'Trasladar al pasajero sano y salvo', 'Las cláusulas que limitan la responsabilidad se tienen por no escritas (Art. 1292)'],
+      },
+      {
+        icono: 'caja',
+        titulo: 'Cosas',
+        renglones: ['Carta de porte/Segundo ejemplar/Guía', 'Entrega de la carga en el mismo estado en que fue recibida', 'En ciertos supuestos las partes pueden pactar responder solo por culpa (Art. 1310)'],
+      },
     ],
-    pie: 'El equipaje entregado sigue las reglas de las cosas (art. 1293). Por lo que el pasajero lleva consigo, solo se responde con culpa probada (art. 1294).',
+    pie: 'El equipaje entregado en el transporte de personas sigue las reglas de las cosas (Art. 1293). Por lo que el pasajero lleva consigo, solo se responde con culpa probada (Art. 1294).',
   },
   {
     tema: 'Caracteres, adhesión y consumo',
     icono: 'firma',
     titulo: 'Caracteres, adhesión y consumo',
     diseno: 'renglones',
-    subtitulo: 'Bilateral · oneroso · conmutativo · no formal · nominado',
+    subtitulo: 'Bilateral · Oneroso · Conmutativo · No formal · Nominado',
     renglones: [
-      'Es por adhesión: el usuario no negocia nada, acepta lo que redactó la empresa (arts. 984 a 989)',
-      'Si el pasajero es consumidor, es un contrato de consumo: ante la duda, se interpreta a su favor (art. 1095)',
-      'La empresa tiene que informar en forma clara y detallada (art. 1100)',
+      'Se celebra por adhesión a cláusulas generales predispuestas.',
+      'Dentro de los contratos de adhesión se trata de un contrato de consumo (Ley 24.240 y Libro Tercero, Título III del CCyCN)',
     ],
   },
   {
@@ -89,13 +99,23 @@ export const VUELTA = [
       {
         titulo: 'Transportista',
         renglones: [
-          'Trasladar al pasajero, llevar su equipaje y, sobre todo, cuidar su seguridad (art. 1289)',
-          'Si ofrece el servicio al público, aceptar los pedidos y tratar a todos por igual (art. 1283)',
+          'Trasladar al pasajero al lugar convenido.',
+          'Proveerle el lugar para viajar que se ha convenido o el disponible reglamentariamente habilitado.',
+          'Garantizar su seguridad.',
+          'Llevar su equipaje (Art. 1289).',
+          'Si ofrece el servicio al público, aceptar los pedidos compatibles con los medios ordinarios de que dispone (Art. 1283)',
         ],
       },
-      { titulo: 'Pasajero', renglones: ['Pagar el precio, presentarse a tiempo y cumplir los reglamentos (art. 1290)'] },
+      {
+        titulo: 'Pasajero',
+        renglones: [
+          'Pagar el precio pactado.',
+          'Presentarse en el lugar y momento convenidos.',
+          'Cumplir las disposiciones y reglamentos.',
+          'Acondicionar su equipaje conforme los mismos reglamentos (Art. 1290)',
+        ],
+      },
     ],
-    partes: 3,
   },
   {
     tema: 'Extinción',
@@ -103,54 +123,63 @@ export const VUELTA = [
     titulo: 'Modos de extinción del contrato',
     diseno: 'extincion',
     grupos: [
-      { titulo: 'Normal', renglones: ['El cumplimiento: el pasajero llega a destino, sano y con su equipaje'] },
+      {
+        titulo: 'Normal',
+        renglones: [
+          'Cumplimiento: El transportista deja al pasajero en el destino pactado, este concluye el desembarco en condiciones seguras y se le restituye el equipaje en el estado en que lo entregó.',
+        ],
+      },
       {
         titulo: 'Anormal',
         renglones: [
           'Desistimiento antes del viaje',
-          'Revocación en 10 días (art. 1110)',
-          'Frustración de la finalidad (art. 1090)',
-          'Imposibilidad de cumplir (art. 1732)',
-          'Resolución por incumplimiento',
+          'Revocación en 10 días (Art. 1110)',
+          'Frustración de la finalidad (Art. 1090)',
+          'Imposibilidad de cumplimiento (Art. 1732)',
+          'Resolución por incumplimiento (Arts. 1083 y ss)',
         ],
       },
     ],
   },
   {
-    tema: 'Obligación de seguridad',
+    tema: 'La obligación de seguridad',
     icono: 'escudo',
-    titulo: 'Llegar sano y salvo',
+    titulo: 'Responsabilidad',
     diseno: 'renglones',
     figura: 'escudo',
     renglones: [
-      'El transportista promete un resultado: responde objetivamente aunque no tenga culpa (arts. 1722 y 1723)',
-      'Se aplican las reglas de las actividades riesgosas (arts. 1286 y 1757)',
-      'No lo liberan manejar bien, cumplir las normas ni tener la habilitación (art. 1757)',
+      'El transportista responde por el incumplimiento del contrato, por el retraso en su ejecución y por la avería o pérdida de sus cosas (Art. 1291).',
+      'Por daños se aplican las reglas de las actividades riesgosas (Arts. 1286 y 1757 a 1759)',
+      'El principal responde objetivamente por los daños que causen los que están bajo su dependencia, o las personas de las cuales se sirve para el cumplimiento de sus obligaciones, cuando el hecho dañoso acaece en ejercicio o con ocasión de las funciones encomendadas (Art. 1753)',
+      'Si el daño resulta del vicio o riesgo de la cosa o de la prestación del servicio, responden todos los integrantes de la cadena de comercialización (Arts. 5 y 40 de la LDC)',
     ],
   },
   {
-    tema: 'Eximentes',
+    tema: 'Las eximentes',
     icono: 'rayo',
     titulo: 'Solo lo libera una causa ajena',
     diseno: 'tarjetas',
     tarjetas: [
-      { titulo: 'Hecho de la víctima', texto: 'Su propia conducta causó el daño (art. 1729)' },
-      { titulo: 'Caso fortuito', texto: 'No se pudo prever o no se pudo evitar (art. 1730)' },
-      { titulo: 'Hecho de un tercero', texto: 'Con las mismas características del caso fortuito (art. 1731)' },
+      {
+        titulo: 'Hecho de la víctima/damnificado',
+        texto: 'Incidencia del hecho en la producción del daño salvo que la ley o el contrato dispongan que debe tratarse de su culpa, dolo o cualquier otra circunstancia especial (Art. 1729)',
+      },
+      { titulo: 'Caso fortuito', texto: 'Se considera a aquel caso que no se pudo prever o no se pudo evitar (Art. 1730)' },
+      { titulo: 'Hecho de un tercero', texto: 'Para eximir debe reunir las mismas características del caso fortuito (Art. 1731)' },
     ],
-    recuadro: 'Pero si es un riesgo propio de la actividad, no lo libera (art. 1733 inc. e)',
+    recuadro: 'Si el caso fortuito es un riesgo propio de la actividad, no lo libera (Art. 1733 inc. e)',
     partes: 4,
   },
   {
     tema: 'Cláusulas que no valen',
     icono: 'boleto',
-    titulo: 'Cláusulas que no valen',
+    titulo: 'Cláusulas inválidas',
     diseno: 'renglones',
     figura: 'boleto',
     renglones: [
-      'Las que limitan la responsabilidad por muerte o lesiones se tienen por no escritas (art. 1292)',
-      'Tampoco vale liberarse por anticipado si es abusivo o afecta derechos indisponibles (art. 1743)',
-      'En consumo, se suma el control de las cláusulas abusivas (art. 37 LDC)',
+      'Las cláusulas que limitan la responsabilidad del transportista por muerte o lesiones se tienen por no escritas (Art. 1292)',
+      'Las que eximen o limitan la obligación de indemnizar por anticipado si es abusivo o afecta derechos indisponibles (Art. 1743)',
+      'En consumo, se suma el control de las cláusulas abusivas (Art. 37 LDC)',
     ],
   },
   {
@@ -159,37 +188,26 @@ export const VUELTA = [
     titulo: '¿Quién responde?',
     diseno: 'renglones',
     figura: 'cadena',
-    eslabones: ['Conductor', 'Plataforma', 'Aseguradora'],
+    eslabones: ['Conductor', 'Plataforma?', 'Aseguradoras'],
     renglones: [
-      'Todos los que intervienen en el servicio responden frente al pasajero (art. 40 LDC)',
-      'Si responden por causas distintas, las obligaciones son concurrentes (art. 1751)',
-      'Puede sumarse el daño punitivo: una multa a favor del consumidor (art. 52 bis LDC)',
+      'Todos los que intervienen en el servicio responden frente al pasajero (Art. 40 LDC)',
+      'Si varias personas responden por causa única las obligaciones son solidarias; si responden por causas distintas, las obligaciones son concurrentes (Art. 1751)',
+      'Puede sumarse el daño punitivo: una multa a favor del consumidor (Art. 52 bis LDC)',
     ],
   },
   {
-    tema: 'Contratos a distancia',
+    tema: 'Contratos a distancia y electrónicos',
     icono: 'clic',
     titulo: 'Un contrato que se celebra con un clic',
     diseno: 'renglones',
     renglones: [
-      'Se celebra a distancia, sin que las partes estén juntas (art. 1105)',
-      'El soporte electrónico cumple con la forma escrita (art. 1106)',
+      'Los contratos celebrados a distancia son aquellos concluidos con el uso exclusivo de medios de comunicación a distancia (Art. 1105)',
+      'El soporte electrónico cumple con la forma escrita (Art. 1106)',
       'El usuario es doblemente vulnerable: como consumidor y frente a la tecnología',
-      'Por eso la empresa debe informar los riesgos del medio y quién los asume (art. 1107)',
+      'Por eso la empresa debe informar los riesgos del medio y quién los asume, además del deber de informar general sobre el contrato (Art. 1107)',
     ],
-  },
-  {
-    tema: 'Abusividad, jurisdicción y arbitraje',
-    icono: 'juzgado',
-    titulo: 'Jurisdicción y arbitraje',
-    diseno: 'renglones',
-    figura: 'mapa',
-    renglones: [
-      'El juez es el del lugar donde se recibe el servicio (art. 1109)',
-      'Las cláusulas que cambian la jurisdicción se tienen por no escritas (art. 1109)',
-      'En casos internacionales, el consumidor elige dónde demandar (art. 2654)',
-      'Los conflictos de consumo no pueden ir a arbitraje (art. 1651 inc. c)',
-    ],
+    recuadro:
+      'En los contratos celebrados a distancia se considera lugar de cumplimiento aquel en que el consumidor debe recibir la prestación. Ese lugar fija la jurisdicción aplicable a los conflictos derivados del contrato. La cláusula de prórroga de jurisdicción se tiene por no escrita (Art. 1109)',
   },
   {
     tema: '¿Intermediario o parte?',
@@ -198,7 +216,7 @@ export const VUELTA = [
     diseno: 'enfrentadas',
     columnas: [
       { titulo: 'Lo que dicen', citas: true, renglones: ['“Solo conectamos pasajeros con conductores”', '“No somos dueños de los autos”'] },
-      { titulo: 'Lo que hacen', renglones: ['Fijan la tarifa', 'Asignan los viajes', 'Cobran y se quedan con una comisión'] },
+      { titulo: 'Lo que hacen', renglones: ['Fijan la tarifa', 'Asignan los viajes', 'Cobran y se quedan con una comisión', 'Evalúan a los conductores y pasajeros'] },
     ],
     partes: 2,
   },
@@ -210,8 +228,7 @@ export const VUELTA = [
     renglones: [
       'El algoritmo asigna los viajes, fija la tarifa dinámica y define la reputación',
       'Las empresas lo guardan como secreto comercial',
-      'Eso choca con el deber de informar “toda otra circunstancia relevante” (art. 1100)',
-      'Hipervulnerabilidad del consumidor',
+      'Creemos que esto choca con el deber de informar “toda otra circunstancia relevante” (Arts. 1100 y 1107)',
     ],
   },
 ];
@@ -292,11 +309,12 @@ export const TERMINOS = {
 
 // ---------------------------------------------------------------- the game
 
-// Rigged spinner of the game, in turn order: cars 1, 2, 3, 4 and again. The car
-// really moves that many squares along its lane, landing on its card squares:
-// car 1 on 4, 11, 17; car 2 on 5, 9, 14; car 3 on 3, 11, 14; car 4 on 6, 8, 18.
-// Car 2 stops on 5 with car 1 right behind on 4, so it can be rear-ended.
-export const GIROS_JUEGO = [4, 5, 3, 6, 7, 4, 8, 2, 6, 5, 3, 10];
+// Rigged spinner of the game, in turn order: cars 1, 2, 3, 4 and again. The
+// four cars share one road and really move that many squares, landing on their
+// card squares: car 1 on 4, 10, 17; car 2 on 5, 12, 16; car 3 on 2, 11, 14;
+// car 4 on 8, 15, 19. Car 2 stops on 5 with car 1 right behind on 4, so it can
+// be rear-ended. The last four spins take each car exactly to Destino (20).
+export const GIROS_JUEGO = [4, 5, 2, 8, 6, 7, 9, 7, 7, 4, 3, 4, 3, 4, 6, 1];
 export const CASILLAS_JUEGO = 20;
 
 export const RUEDITA = {
@@ -477,10 +495,12 @@ export const CLAUSULAS = {
   ],
 };
 
+// The card of a turn, or null for the last round (the drive to Destino).
 export function casilla(turn) {
   const auto = AUTOS[turn % AUTOS.length];
   const index = Math.floor(turn / AUTOS.length);
-  return { auto, index, ...auto.casillas[index] };
+  const c = auto.casillas[index];
+  return c ? { auto, index, ...c } : null;
 }
 
 export function zonaDe(n) {

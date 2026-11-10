@@ -11,14 +11,15 @@
 
 ```
 src/
-  content/guion.js  Todos los textos: las 14 diapositivas, los números de las dos
+  content/guion.js  Todos los textos: las 13 diapositivas, los números de las dos
                     ruedas, los cuatro autos y sus casillas
   engine/           Sin DOM: se prueba con node --test
     flow.js           El guion como máquina de estados
     store.js          Estado actual, atrás/adelante, saltos, guardado, ajustes
   scene/            Tablero 3D
-    layout.js         Juego: cuatro carriles, bifurcación, Inicio, Destino, zonas,
-                      río; las clases Path, Lane y Route
+    layout.js         Juego: el camino único, el abanico de Inicio y Destino,
+                      bifurcación, zonas, río; las clases Path, Lane (con el
+                      desvío para pasar autos parados) y Route
     lap.js            Vuelta: el camino de 40 casillas, sus zonas y Destino
     track.js          Geometría de los dos caminos, casillas, pórtico, barrera,
                       bandera, carteles de zona, cartel del título
@@ -39,7 +40,8 @@ src/
   ui/               HTML sobre el tablero
     hud.js            Barra superior, equipos, nombres sobre los autos, botón de menú
     slides.js         Diapositivas de la vuelta y cartel de llegada
-    cards.js          Tarjetas del juego (pregunta, y la respuesta debajo)
+    cards.js          Tarjetas del juego (se dan vuelta: pregunta adelante,
+                      respuesta atrás)
     scenes.js         Celular, bifurcación, términos, llegada, sentencias,
                       ruedita final con los números
     effects.js        Lluvia y alerta, relámpago, globos, martillo, confeti
@@ -60,17 +62,18 @@ El juego es un guion fijo. Un estado es un objeto chico que dice en qué punto d
 
 ```
 vuelta{stop: 0, listo}
-→ vuelta{n, titulo} → vuelta{n, texto, part: 1..partes} → vuelta{n, listo} … (n = 1..14)
+→ vuelta{n, titulo} → vuelta{n, texto, part: 1..partes} → vuelta{n, listo} … (n = 1..13)
 → meta → celular
 → bifurcacion{car, tried} ─┬─ negociar → bifurcacion{car, tried: [...,'negociar']}
                            └─ leer | aceptar → bifurcacion{car + 1, tried: []} … o, tras el auto 4,
 turno{t, listo} → girado → movido → pregunta → respuesta → turno{t+1, listo} … (12 turnos)
+→ turno{t, listo} → girado → turno{t+1, listo} … (4 turnos de la última vuelta, sin tarjeta)
 → llegada → sentencias{shown: 1..4} → ruedita{lista: false} → ruedita{lista: true}
 → celular2 → clausulas (fin)
 ```
 
 - `next(s)` y `choose(s, camino)` (en `flow.js`) son las únicas formas de avanzar. Son funciones puras.
-- El turno `t` lo juega el auto `t % 4` en su ronda `t / 4`; la casilla es la suma de sus giros (`LANE_POS`). En la vuelta, `LAP_POS` hace lo mismo con `GIROS_VUELTA`.
+- El turno `t` lo juega el auto `t % 4` en su ronda `t / 4`; la casilla es la suma de sus giros (`LANE_POS`). Los turnos 12 a 15 son la última vuelta: los giros suman 20 y todos terminan en Destino. En la vuelta, `LAP_POS` hace lo mismo con `GIROS_VUELTA`.
 - Todo lo que se ve se deriva del estado: `world(s)` (qué tablero), `carPlaces(s)` (dónde está cada auto del juego), `lapPlace(s)` (el auto de la vuelta), `spinShown(s)` (qué número muestra la ruedita), `activeCar(s)`.
 - `walkthrough()` lista todos los estados del guion (tomando "aceptar" en la bifurcación). Lo usan el menú "Ir a" y las pruebas.
 
@@ -88,7 +91,7 @@ turno{t, listo} → girado → movido → pregunta → respuesta → turno{t+1, 
 - Al abrir, si el guion no está al principio, se ofrece "Continuar" o "Empezar de cero".
 - En Chrome y Edge, `localStorage` de archivos `file://` se comparte entre archivos locales; en Safari depende de la ruta del archivo.
 - Si el almacenamiento está bloqueado (modo privado), el juego funciona igual pero sin guardado.
-- Si cambia el formato o la cantidad de pasos, subir `STORAGE_KEY` en `store.js`: lo guardado con otra versión se ignora.
+- Si cambia el formato o la cantidad de pasos, subir `STORE_VERSION` en `store.js`: lo guardado con otra versión se descarta (los ajustes se conservan).
 
 ## Gráficos
 
@@ -107,9 +110,9 @@ turno{t, listo} → girado → movido → pregunta → respuesta → turno{t+1, 
 npm test
 ```
 
-- `flow.test.mjs`: el guion completo de la vuelta a las cláusulas, los clics de cada casilla y de cada turno, dónde cae cada giro, que dos autos nunca compartan casilla, la bifurcación auto por auto, y el `Store` (atrás, adelante, saltos, guardado, otra versión).
-- `guion.test.mjs`: las 14 diapositivas con lo que pide su diseño, cuatro autos con tres casillas completas, cada animación en su casilla, los números de las ruedas, las sentencias, los términos en inglés sin final resaltado.
-- `layout.test.mjs`: carriles de 20 casillas separados, Inicio y bifurcación para cada carril, nada fuera del tablero ni sobre la ruedita ni el río, curvas no demasiado cerradas, nombres de zona fuera del camino; la vuelta con sus 40 casillas y sus zonas.
+- `flow.test.mjs`: el guion completo de la vuelta a las cláusulas, los clics de cada casilla y de cada turno, la última vuelta, dónde cae cada giro, que dos autos nunca compartan casilla, la bifurcación auto por auto, y el `Store` (atrás, adelante, saltos, guardado, otra versión).
+- `guion.test.mjs`: las 13 diapositivas con lo que pide su diseño, cuatro autos con tres casillas completas, giros que suman 20 por auto, cada animación en su casilla, los números de las ruedas, las sentencias, los términos en inglés sin final resaltado.
+- `layout.test.mjs`: 19 casillas más Destino, un auto de ancho en el camino y cuatro en Inicio y Destino, el desvío para pasar autos parados, bifurcación para cada auto, nada fuera del tablero ni sobre la ruedita ni el río, curvas no demasiado cerradas, nombres de zona fuera del camino; la vuelta con sus 40 casillas iguales y sus zonas.
 
 Verificación manual antes de presentar: [MANTENIMIENTO.md](MANTENIMIENTO.md#checklist-antes-de-presentar).
 

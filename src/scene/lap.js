@@ -5,8 +5,8 @@ import { Path, ROAD_WIDTH, SALIDA_POS, roadDistance } from './layout.js';
 
 // The road of the explanatory lap: it leaves the same Salida in front of the
 // Facultad, crosses the Riachuelo and winds through town with 40 squares. Only
-// 14 carry a slide (bigger, numbered, with an icon); the rest are for passing.
-// Square 40 is Destino.
+// 13 carry a slide, but all of them look the same (a number and a drawing), so
+// the spins seem random. Square 40 is Destino.
 
 export const LAP = new Path(
   'vuelta',
@@ -26,7 +26,7 @@ export const LAP = new Path(
   2.4,
 );
 
-export const LAP_TILE = { pass: { length: 1.3, width: ROAD_WIDTH - 0.5 }, content: { length: 1.85, width: ROAD_WIDTH - 0.18 } };
+export const LAP_TILE = { length: 1.55, width: ROAD_WIDTH - 0.3 };
 
 const FIRST = 2.2;
 const LEAD_OUT = 1.6;
@@ -37,7 +37,7 @@ export function lapS(k) {
   return k <= 0 ? 0.25 : FIRST + (k - 1) * LAP_STEP;
 }
 
-// Content square n (1..14) of each lap position, or 0 for a passing square.
+// Content square n (1..13) of each lap position, or 0 for a passing square.
 export const CONTENT_AT = new Map(LAP_POS.slice(0, VUELTA.length).map((pos, i) => [pos, i + 1]));
 
 // Zones by lap square: each one runs from just after the previous zone's last

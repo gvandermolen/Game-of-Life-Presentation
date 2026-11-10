@@ -1,7 +1,7 @@
 import { TITULO } from '../content/guion.js';
 import { START, choose, isValid, next, same } from './flow.js';
 
-export const STORE_VERSION = 2;
+export const STORE_VERSION = 3;
 export const STORAGE_KEY = 'destino-sano-y-salvo.v2';
 
 export const DEFAULT_SETTINGS = {
@@ -23,7 +23,8 @@ function valid(data) {
 export class Store {
   constructor(storage, data) {
     this.storage = storage;
-    this.data = valid(data) ? data : Store.fresh();
+    // A save from an older script starts over, but keeps the settings.
+    this.data = valid(data) ? data : Store.fresh({ ...DEFAULT_SETTINGS, ...(data && typeof data.settings === 'object' ? data.settings : {}) });
     this.data.settings = { ...DEFAULT_SETTINGS, ...this.data.settings };
     if (typeof this.data.settings.titulo !== 'string' || !this.data.settings.titulo.trim()) this.data.settings.titulo = TITULO;
     this.data.fwd ||= [];

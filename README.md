@@ -4,8 +4,8 @@ Juego de mesa 3D, estilo *Juego de la Vida*, para la presentación del Grupo 7 s
 
 Es un guion, no un juego de azar, en dos momentos:
 
-- **La vuelta**: un solo auto, "Toda la clase", recorre un camino de 40 casillas. En cada una de las 14 casillas de contenido se abre una diapositiva con el tema que presentamos.
-- **El juego**: cuatro autos (cuatro grupos del aula) piden un viaje en una app, eligen un camino en la bifurcación y avanzan cada uno por su carril de 20 casillas. Cada auto cae en tres casillas con un caso y una pregunta. Al final se revela la trampa: la ruedita siempre dio el número necesario, el celular tenía 2 % de batería, la tarifa subió y todos aceptaron unos Términos y Condiciones que nadie leyó.
+- **La vuelta**: un solo auto, "Toda la clase", recorre un camino de 40 casillas. En cada una de las 13 casillas de contenido se abre una diapositiva con el tema que presentamos.
+- **El juego**: cuatro autos (cuatro grupos del aula) piden un viaje en una app, eligen un camino en la bifurcación y avanzan por un mismo camino de 19 casillas hasta Destino. Cada auto cae en tres casillas con un caso y una pregunta, y en una última vuelta llega a Destino. Al final se revela la trampa: la ruedita siempre dio el número necesario, el celular tenía 2 % de batería, la tarifa subió y todos aceptaron unos Términos y Condiciones que nadie leyó.
 
 El nombre del juego se cambia en el menú > Ajustes.
 
@@ -31,9 +31,9 @@ Atajos completos: [docs/ATAJOS.md](docs/ATAJOS.md).
 2. **El celular**: la app Llevame, batería 4 %, tarifa x1,8, letra chica, ACEPTAR.
 3. **La bifurcación**, auto por auto, con tres caminos:
    - Negociar los términos: barrera y cartel "Contrato por adhesión". El auto vuelve y elige otra vez.
-   - Leer los términos: el texto pasa demasiado rápido y en inglés. Después, al carril.
-   - Aceptar sin leer: directo al carril.
-4. **12 turnos**: ruedita, el auto avanza (con su animación), la tarjeta con la situación y la pregunta, la respuesta, y pasa el turno.
+   - Leer los términos: el texto pasa demasiado rápido y en inglés. Después, a Inicio.
+   - Aceptar sin leer: directo a Inicio.
+4. **12 turnos**: ruedita, el auto avanza (con su animación), la tarjeta con la situación y la pregunta, que se da vuelta para mostrar la respuesta, y pasa el turno. Después, una última vuelta: cada auto gira y llega a Destino.
 5. **Final**: llegada a Destino, las cuatro sentencias, la ruedita con todos los números que salieron y el celular final con las cláusulas del juego.
 
 ## Documentación
