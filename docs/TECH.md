@@ -42,7 +42,7 @@ src/
     slides.js         Diapositivas de la vuelta y cartel de llegada
     cards.js          Tarjetas del juego (se dan vuelta: pregunta adelante,
                       respuesta atrás)
-    scenes.js         Celular, bifurcación, términos, llegada, sentencias,
+    scenes.js         Celular, bifurcación, términos, sentencia de cada auto,
                       ruedita final con los números
     effects.js        Lluvia y alerta, relámpago, globos, martillo, confeti
     menu.js           Menú (ir a, ajustes, empezar de cero) y aviso de "Continuar"
@@ -67,8 +67,9 @@ vuelta{stop: 0, listo}
 → bifurcacion{car, tried} ─┬─ negociar → bifurcacion{car, tried: [...,'negociar']}
                            └─ leer | aceptar → bifurcacion{car + 1, tried: []} … o, tras el auto 4,
 turno{t, listo} → girado → movido → pregunta → respuesta → turno{t+1, listo} … (12 turnos)
-→ turno{t, listo} → girado → turno{t+1, listo} … (4 turnos de la última vuelta, sin tarjeta)
-→ llegada → sentencias{shown: 1..4} → ruedita{lista: false} → ruedita{lista: true}
+→ turno{t, listo} → girado → sentencia → turno{t+1, listo} … (4 turnos: cada auto llega
+  a Destino y se da vuelta su sentencia; tras la cuarta, directo a la ruedita)
+→ ruedita{lista: false} → ruedita{lista: true}
 → celular2 → clausulas (fin)
 ```
 

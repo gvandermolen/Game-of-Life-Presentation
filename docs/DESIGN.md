@@ -58,14 +58,12 @@ Las diapositivas ocupan la derecha de la pantalla, con el auto a la izquierda. A
    4. Clic: se abre la tarjeta: título, situación y pregunta en negrita.
    5. Clic: la tarjeta se da vuelta y muestra la respuesta, en otro color. Si hay opciones, las correctas se marcan en verde y la trampa en rojo.
    6. Clic: se cierra la tarjeta y pasa el turno.
-4. **Última vuelta**: un turno más por auto, sin tarjeta. Clic: gira la ruedita (3, 4, 6 y 1). Clic: el auto llega a Destino. Después del cuarto, el cartel de Destino con papel picado.
+4. **Última vuelta**: un turno más por auto. Clic: gira la ruedita (3, 4, 6 y 1). Clic: el auto llega a Destino y, con el mismo clic, entra su sentencia boca abajo y se da vuelta. Es una tarjeta grande a la derecha, con borde del color del auto, el título "SENTENCIA", el grupo y el monto; el auto queda a la izquierda. Clic: se cierra y juega el auto siguiente. Con la cuarta, fanfarria y papel picado, y el clic siguiente va a la ruedita.
 
 ### Final
 
-1. **Llegada**: los cuatro autos esperan en Destino. "Destino · Llegaron los cuatro autos".
-2. **Sentencias**: una tarjeta por auto, se da vuelta una por clic.
-3. **Ruedita**: "¿Se dieron cuenta de que siempre salió el número que necesitábamos?" Clic: la lista de todos los números que salieron en la vuelta y en el juego.
-4. **Celular final**: batería 2 %, $16.700, x2,4, con la batería y el precio marcados. "¿Y vieron cuánta batería tenía el celular?" Clic en la letra chica: los Términos y Condiciones del juego, cinco cláusulas en chiste.
+1. **Ruedita**: "¿Se dieron cuenta de que siempre salió el número que necesitábamos?" Clic: la lista de todos los números que salieron en la vuelta y en el juego.
+2. **Celular final**: batería 2 %, $16.700, x2,4, con la batería y el precio marcados. "¿Y vieron cuánta batería tenía el celular?" Clic en la letra chica: los Términos y Condiciones del juego, cinco cláusulas en chiste.
 
 ## Autos
 

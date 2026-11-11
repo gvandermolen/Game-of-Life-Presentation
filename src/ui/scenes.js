@@ -1,4 +1,4 @@
-import { AUTOS, BIFURCACION, CELULAR, CELULAR_FINAL, CLAUSULAS, GIROS_JUEGO, GIROS_VUELTA, LLEGADA, RUEDITA, TERMINOS } from '../content/guion.js';
+import { AUTOS, BIFURCACION, CELULAR, CELULAR_FINAL, CLAUSULAS, GIROS_JUEGO, GIROS_VUELTA, RUEDITA, TERMINOS } from '../content/guion.js';
 import { FORK } from '../engine/flow.js';
 import { el, esc } from './dom.js';
 import { vehicleSVG } from './icons.js';
@@ -242,25 +242,22 @@ export class Fork {
 export class Finale {
   constructor(root, app) {
     this.app = app;
-    this.arrivalNode = el(`<div class="arrival"><div class="arrival-sign"><small>${esc(LLEGADA.sub)}</small><b>${esc(LLEGADA.titulo)}</b></div></div>`);
+    this.car = null;
     this.cardsNode = el(`
       <div class="verdicts">
-        <div class="verdicts-title">Sentencias</div>
-        <div class="verdict-grid">
-          ${AUTOS.map(
-            (a, i) => `
-            <div class="verdict" style="--team:${a.color}" data-i="${i}">
-              <div class="verdict-inner">
-                <div class="v-face v-back"><span>SENTENCIA</span><small>${esc(a.grupo)}</small></div>
-                <div class="v-face v-front">
-                  <div class="v-head">SENTENCIA</div>
-                  <div class="v-team">${vehicleSVG(a.vehiculo, a.color)}<span><b>${esc(a.grupo)}</b><small>${esc(a.nombre)}</small></span></div>
-                  <p>${esc(a.sentencia)}</p>
-                </div>
+        ${AUTOS.map(
+          (a, i) => `
+          <div class="verdict" style="--team:${a.color}" data-i="${i}">
+            <div class="verdict-inner">
+              <div class="v-face v-back"><span>SENTENCIA</span><small>${esc(a.grupo)}</small></div>
+              <div class="v-face v-front">
+                <div class="v-head">SENTENCIA</div>
+                <div class="v-team">${vehicleSVG(a.vehiculo, a.color)}<span><b>${esc(a.grupo)}</b><small>${esc(a.nombre)}</small></span></div>
+                <p>${esc(a.sentencia)}</p>
               </div>
-            </div>`,
-          ).join('')}
-        </div>
+            </div>
+          </div>`,
+        ).join('')}
       </div>`);
     const list = (title, nums) => `<div class="spins"><b>${esc(title)}</b><div>${nums.map((n, i) => `<span style="--i:${i}">${n}</span>`).join('')}</div></div>`;
     this.spinNode = el(`
@@ -268,37 +265,29 @@ export class Finale {
         <div class="reveal-sign">${esc(RUEDITA.cartel)}</div>
         <div class="reveal-lists">${list(RUEDITA.vuelta, GIROS_VUELTA)}${list(RUEDITA.juego, GIROS_JUEGO)}</div>
       </div>`);
-    root.append(this.arrivalNode, this.cardsNode, this.spinNode);
+    this.cardsNode.addEventListener('click', () => this.app.next());
+    root.append(this.cardsNode, this.spinNode);
   }
 
-  arrival(on, { fanfare = false } = {}) {
-    toggle(this.arrivalNode, on);
-    if (on && fanfare) {
-      this.app.sound.fanfare();
-      this.app.effects.confetti(5);
-    }
-  }
-
-  // Cards 1..shown are on the table; the newest flips over when animated.
-  sentencias(shown, { animate = false } = {}) {
-    if (!animate && shown === this.shown) return;
-    this.shown = shown;
-    toggle(this.cardsNode, shown > 0);
+  // The sentencia of car c; null hides them. With `animate` it is dealt face
+  // down, and `flip` turns it over. A plain call shows it face up, which is
+  // what going back or jumping to the step does.
+  verdict(c, { animate = false } = {}) {
+    this.car = c;
+    toggle(this.cardsNode, c != null);
     this.cardsNode.querySelectorAll('.verdict').forEach((v, i) => {
-      const on = i < shown;
-      const fresh = animate && i === shown - 1;
+      const on = i === c;
       v.classList.toggle('dealt', on);
-      if (fresh) {
-        v.classList.remove('flipped');
-        requestAnimationFrame(() =>
-          setTimeout(() => {
-            v.classList.add('flipped');
-            this.app.sound.flip();
-          }, 520),
-        );
-        this.app.sound.card();
-      } else v.classList.toggle('flipped', on);
+      v.classList.toggle('flipped', on && !animate);
     });
+    if (c != null && animate) this.app.sound.card();
+  }
+
+  flip(c) {
+    const v = this.cardsNode.querySelector(`[data-i="${c}"]`);
+    if (!v || this.car !== c) return;
+    v.classList.add('flipped');
+    this.app.sound.flip();
   }
 
   // state: a 'ruedita' state, or null to hide. With `lista` the numbers show.
@@ -308,8 +297,7 @@ export class Finale {
   }
 
   closeAll() {
-    this.arrival(false);
-    this.sentencias(0);
+    this.verdict(null);
     this.ruedita(null);
   }
 }

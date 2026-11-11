@@ -339,22 +339,22 @@ export const AUTOS = [
         anim: 'choque',
         situacion: 'Pediste un Cabify, te dormiste atrás sin cinturón. El conductor perdió el control, chocó un árbol y un semáforo, y el auto volcó. Te lastimaste.',
         pregunta: '¿Qué obligación del contrato se incumplió? ¿A quién le reclamás?',
-        respuesta: 'La obligación de seguridad: el transportista tiene que llevarte sano y salvo (art. 1289). Podés reclamarle al conductor, a Cabify y a sus aseguradoras.',
+        respuesta: 'La obligación de seguridad: el transportista tiene que llevarte a destino sano y salvo. Podés reclamarle al conductor, a Cabify y a sus aseguradoras. (Art. 1289 y Art 40 LDC)',
       },
       {
         titulo: 'La contestación y la primera instancia',
         anim: 'martillo',
-        situacion: 'Al contestar la demanda, Cabify reconoce al conductor como “chofer de esta agencia de Remise” y alega que la pasajera no llevaba el cinturón. El juez condena al conductor y a Cabify, con sus aseguradoras, pero le atribuye a la pasajera un 30 % de la culpa de sus lesiones por no llevar el cinturón. Cabify apela y, por primera vez, dice que es una mera aplicación tecnológica.',
-        pregunta: '¿Están de acuerdo con el 30 %? ¿Puede Cabify decir ahora que es una mera intermediaria?',
-        respuesta: 'Discusión abierta. La respuesta la da la Cámara.',
+        situacion: 'Al contestar la demanda, Cabify alega que la pasajera no llevaba el cinturón. El juez condena al conductor y a Cabify, con sus aseguradoras, pero le atribuye a la pasajera un 30 % de la culpa de sus lesiones por no llevarlo.',
+        pregunta: '¿Corresponde esa reducción?',
+        pista: 'no hubo peritaje.',
+        respuesta: 'No, el hecho de la víctima solo reduce la indemnización si incidió en el daño (Art. 1729), y eso hay que probarlo. No hubo peritaje que demostrara que no llevar el cinturón causó o agravó las lesiones, así que no corresponde.',
       },
       {
         titulo: 'La Cámara',
         anim: 'martillo',
-        situacion: 'La Cámara resuelve la apelación de Cabify.',
-        pregunta: '¿Qué decidió sobre la defensa de “mera app”? ¿Y qué pasó con el cinturón?',
-        pista: 'no hubo peritaje.',
-        respuesta: 'No puede: esa defensa no se planteó al contestar la demanda y no se puede introducir recién en la apelación. Además contradice sus propios actos, porque en la contestación había llamado al conductor “chofer de esta agencia de Remise”. Y aun en el fondo, quien gana plata organizando el servicio no puede trasladar las pérdidas. Sobre el cinturón: no se probó que causara o agravara las lesiones, así que se eliminó el 30 %. Indemnización: $9.000.000 por incapacidad y $6.000.000 por daño extrapatrimonial.',
+        situacion: 'Al contestar la demanda, Cabify había llamado al conductor “chofer de esta agencia de Remise”. Pero al apelar dice, por primera vez, que es una mera aplicación tecnológica que solo conecta pasajeros con conductores.',
+        pregunta: '¿Puede plantear esa defensa recién ahora? ¿Les parece una mera intermediaria?',
+        respuesta: 'No puede: esa defensa no se planteó al contestar la demanda y no se puede introducir recién en la apelación. Además contradice sus propios actos, porque en la contestación había llamado al conductor “chofer de esta agencia de Remise”. Y aun en el fondo, quien gana plata organizando el servicio no puede trasladar las pérdidas. Sobre el cinturón: dado que no se probó que causara o agravara las lesiones, se eliminó el 30 %.',
       },
     ],
     sentencia: '$9.000.000 por incapacidad + $6.000.000 por daño extrapatrimonial. Sin reducción por el cinturón.',
@@ -375,7 +375,7 @@ export const AUTOS = [
         reloj: '8:41',
         situacion: 'El auto del Grupo 1 los chocó de atrás. El pasajero se golpeó, se rompió la valija que iba en el baúl y también la notebook que llevaba en el asiento. La plataforma dice: “Fue culpa de un tercero”.',
         pregunta: '¿Se libera? ¿Responde igual por la valija y por la notebook?',
-        respuesta: 'No se libera. Es un hecho de un tercero, pero solo libera si tiene las características del caso fortuito: que no se haya podido prever o evitar (art. 1731). Un choque en el tránsito es un riesgo propio de la actividad (art. 1733 inc. e): solo exime el caso fortuito externo a la actividad. Responde y después le reclama al otro conductor. Por la valija del baúl responde en forma objetiva, porque se la entregaron y rigen las reglas del transporte de cosas (art. 1293). Por la notebook, que quedó a cargo del pasajero, solo si se prueba su culpa (art. 1294).',
+        respuesta: 'No se libera. Es un hecho de un tercero, pero solo libera si tiene las características del caso fortuito: que no se haya podido prever o evitar (Art. 1731). Un choque en el tránsito es un riesgo propio de la actividad (Art. 1733 inc. e). Responde y después le reclama al otro conductor. Por la valija del baúl responde en forma objetiva, porque se la entregaron y rigen las reglas del transporte de cosas (Art. 1293). Por la notebook, que quedó a cargo del pasajero, solo si se prueba su culpa (Art. 1294).',
       },
       {
         titulo: 'El perro y la tormenta',
@@ -383,7 +383,7 @@ export const AUTOS = [
         reloj: '8:52',
         situacion: 'Primero, un perro cruzó la calle, el conductor frenó de golpe y el pasajero se golpeó contra el asiento. Después, con alerta naranja por tormenta, el conductor siguió circulando y cayó una rama sobre el auto. Las dos veces la plataforma dice: “Fue un caso fortuito”.',
         pregunta: '¿Alguna de las dos la libera?',
-        respuesta: 'Ninguna. El caso fortuito tiene que ser imprevisible o inevitable (art. 1730), y se analiza según las circunstancias. Que algo se cruce en la calle es previsible en la ciudad. Y con alerta meteorológica la tormenta también era previsible: seguir circulando fue decisión del transportista.',
+        respuesta: 'Ninguna. El caso fortuito tiene que ser imprevisible o inevitable (Art. 1730), y se analiza según las circunstancias. Que algo se cruce en la calle es previsible en la ciudad. Y con alerta meteorológica la tormenta también era previsible: seguir circulando fue decisión del transportista.',
       },
       {
         titulo: 'Me bajo acá',
@@ -391,7 +391,7 @@ export const AUTOS = [
         reloj: '8:58',
         situacion: 'Llegando tarde a un parcial, el pasajero abrió la puerta en plena autopista y se bajó con el auto en movimiento, aunque el conductor le gritó que no lo hiciera. Se lastimó. La plataforma dice: “Fue culpa del propio pasajero”.',
         pregunta: '¿Se libera?',
-        respuesta: 'Sí. Es hecho del damnificado (art. 1729): la causa del daño fue la conducta del propio pasajero. No hace falta probar su culpa, alcanza con que haya causado el daño.',
+        respuesta: 'Sí. Es hecho del damnificado (Art. 1729): la causa del daño fue la conducta del propio pasajero. No hace falta probar su culpa, alcanza con que haya causado el daño.',
       },
     ],
     sentencia: '$21.000.000 por los primeros 2 accidentes. Por el último: $0.',
@@ -407,16 +407,17 @@ export const AUTOS = [
       {
         titulo: 'El pozo',
         anim: 'pozo',
-        situacion: 'El pasajero se lastimó y reclama. La app le responde con sus términos: los servicios se prestan “tal cual”, no garantiza “la seguridad” de los conductores, no responde por “lesión personal” y, además, el usuario tiene que “mantener indemne” a la plataforma frente a cualquier reclamo.',
+        situacion: 'El pasajero se lastimó por un pozo y le reclama a Uber. La app le responde con sus términos: los servicios se prestan “tal cual”, no garantiza “la seguridad” de los conductores, no responde por “lesión personal” y, además, el usuario tiene que “mantener indemne” a la plataforma frente a cualquier reclamo.',
         pregunta: '¿Valen esas cláusulas?',
-        respuesta: 'No. Las cláusulas que limitan la responsabilidad del transportista por daños corporales se tienen por no escritas (art. 1292, CCyCN), y todas son abusivas (art. 37 LDC, art. 1743 CCyCN). La indemnidad es la peor: significa que, si hay un problema, paga el usuario y no la empresa, lo que da vuelta el deber de seguridad del proveedor.',
+        respuesta: 'No. Las cláusulas que limitan la responsabilidad del transportista por daños corporales se tienen por no escritas (Art. 1292), y el resto son abusivas (Art. 37 LDC y Art. 1743). La indemnidad es la peor: significa que, si hay un problema, paga el usuario y no la empresa, lo que da vuelta el deber de seguridad del proveedor.',
       },
       {
         titulo: 'Ámsterdam',
         anim: 'amsterdam',
         situacion: 'Para cualquier disputa, los términos dicen: mediación obligatoria y después arbitraje en Ámsterdam, en inglés y confidencial, bajo la ley de los Países Bajos.',
         pregunta: '¿Tiene que viajar a Holanda para reclamar?',
-        respuesta: 'No. Los conflictos de consumo no pueden ir a arbitraje (art. 1651 inc. c). En contratos a distancia, la cláusula de prórroga de jurisdicción se tiene por no escrita (art. 1109) y el consumidor puede demandar en Argentina (art. 2654).',
+        pista: 'Recuerden las controversias excluidas de arbitraje.',
+        respuesta: 'No. Los conflictos de consumo no pueden ir a arbitraje (Art. 1651 inc. c). En contratos a distancia, la cláusula de prórroga de jurisdicción se tiene por no escrita (Art. 1109) y el consumidor puede demandar en Argentina (Arts. 1109, 2654, 2656).',
       },
       {
         titulo: 'La Justicia confirma',
@@ -454,7 +455,7 @@ export const AUTOS = [
           'Prohibir Uber en la Ciudad.',
         ],
         correctas: [0, 1, 2],
-        respuesta: 'A, B y C son correctas: es una condena en un triple orden, arancelario, tributario y publicitario. D es la trampa: la sentencia no prohibió las plataformas. Además, la condena tenía una condición: cesaba automáticamente cuando se regulara la actividad. El fallo europeo es el del Tribunal de Justicia de la Unión Europea (Élite Taxi, 2017), que vimos en la explicación.',
+        respuesta: 'A, B y C son correctas: es una condena en un triple orden, arancelario, tributario y publicitario. D es la trampa: la sentencia no prohibió las plataformas. Además, la condena tenía una condición: cesaba automáticamente cuando se regulara la actividad.',
       },
       {
         titulo: 'Llega la regulación (2026)',
@@ -476,11 +477,6 @@ export const ANIMACION = {
   zzz: 'Zzz…',
   ay: '¡AY!',
   juez: 'Order! This dispute shall be heard in Amsterdam, in English.',
-};
-
-export const LLEGADA = {
-  titulo: 'Destino',
-  sub: 'Llegaron los cuatro autos',
 };
 
 // The "Terms and Conditions of the game" the class accepted on the phone.

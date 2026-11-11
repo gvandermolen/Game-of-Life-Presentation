@@ -18,10 +18,6 @@ export function chapterName(s) {
       const { car, final } = turnInfo(s.turn);
       return final ? `Hacia Destino · ${AUTOS[car].grupo}` : `Turno ${s.turn + 1} · ${AUTOS[car].grupo}: ${casilla(s.turn).titulo}`;
     }
-    case 'llegada':
-      return 'Llegada a Destino';
-    case 'sentencias':
-      return 'Sentencias';
     case 'ruedita':
       return 'La ruedita';
     case 'celular2':
@@ -33,13 +29,12 @@ export function chapterName(s) {
   }
 }
 
-const SECTION = (s) => (['vuelta', 'meta'].includes(s.phase) ? 'La vuelta' : ['sentencias', 'ruedita', 'celular2', 'clausulas'].includes(s.phase) ? 'Final' : 'El juego');
+const SECTION = (s) => (['vuelta', 'meta'].includes(s.phase) ? 'La vuelta' : ['ruedita', 'celular2', 'clausulas'].includes(s.phase) ? 'Final' : 'El juego');
 
 const ALL = walkthrough();
 const CHAPTERS = ALL.filter((s) => {
   if (s.phase === 'vuelta') return s.stop === 0 ? s.step === 'listo' : s.step === 'titulo';
   if (s.phase === 'turno') return s.step === 'listo';
-  if (s.phase === 'sentencias') return s.shown === 1;
   if (s.phase === 'ruedita') return !s.lista;
   return true;
 });

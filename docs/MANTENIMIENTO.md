@@ -33,7 +33,6 @@ y abrir de nuevo `jugar/JUGAR.html`.
 | Números de la ruedita del juego (16: 12 turnos y la última vuelta) | `GIROS_JUEGO` |
 | Los cuatro autos, sus casillas y su sentencia | `AUTOS` |
 | Textos de las animaciones (alerta, globos, juez) | `ANIMACION` |
-| Cartel de llegada del juego | `LLEGADA` |
 | Cartel final de la ruedita y títulos de las listas | `RUEDITA` |
 | Cláusulas del juego | `CLAUSULAS` |
 
@@ -98,7 +97,7 @@ Rutas relativas a `src/`. Ver [TECH.md](TECH.md) para la arquitectura.
 | Cámara, autos, ruedita, bandera | `scene/stage.js` |
 | Diapositivas de la vuelta | `ui/slides.js` |
 | Tarjetas del juego | `ui/cards.js` |
-| Celular, bifurcación, términos, llegada, sentencias, ruedita final | `ui/scenes.js` |
+| Celular, bifurcación, términos, sentencia de cada auto, ruedita final | `ui/scenes.js` |
 | Lluvia, globos, martillo, confeti | `ui/effects.js` |
 | Barra superior, equipos, nombres sobre los autos, botón de menú | `ui/hud.js` |
 | Menú y aviso de "Continuar" | `ui/menu.js` |

@@ -1,5 +1,5 @@
 import { AUTOS, AUTO_VUELTA, TEMA, VUELTA, casilla, zonaDe } from '../content/guion.js';
-import { ROUNDS, STOPS, TURNS, partsOf, playedTurns, roundsDone, turnInfo } from '../engine/flow.js';
+import { ALL_TURNS, ROUNDS, STOPS, TURNS, partsOf, playedTurns, roundsDone, turnInfo } from '../engine/flow.js';
 import { inkOn } from './cards.js';
 import { el, esc } from './dom.js';
 import { icon, vehicleSVG } from './icons.js';
@@ -12,8 +12,7 @@ const HINTS = {
   pregunta: '<kbd>Espacio</kbd> ver la respuesta',
   respuesta: '<kbd>Espacio</kbd> siguiente turno',
   meta: '<kbd>Espacio</kbd> pedir un auto',
-  llegada: '<kbd>Espacio</kbd> sentencias',
-  sentencias: '<kbd>Espacio</kbd> siguiente sentencia',
+  sentencia: '<kbd>Espacio</kbd> siguiente auto',
   ruedita: '<kbd>Espacio</kbd> continuar',
 };
 
@@ -85,7 +84,7 @@ export class Hud {
     this.top.querySelector('[data-cmd="back"]').disabled = !this.app.store.canBack();
 
     const turn = this.top.querySelector('.turn');
-    const lastVerdict = state.phase === 'sentencias' && state.shown >= AUTOS.length;
+    const lastVerdict = state.phase === 'turno' && state.step === 'sentencia' && state.turn === ALL_TURNS - 1;
     let hint = lastVerdict ? '<kbd>Espacio</kbd> la ruedita' : HINTS[state.phase === 'turno' ? state.step : state.phase];
     if (state.phase === 'turno' && turnInfo(state.turn).final && state.step === 'girado') hint = '<kbd>Espacio</kbd> llegar a Destino';
     if (state.phase === 'ruedita' && !state.lista) hint = '<kbd>Espacio</kbd> ver los números';
@@ -94,7 +93,7 @@ export class Hud {
       const a = AUTOS[car];
       const c = casilla(state.turn);
       const open = ['pregunta', 'respuesta'].includes(state.step);
-      const label = final ? 'Última vuelta · hacia Destino' : `Turno ${state.turn + 1} de ${TURNS}${state.step === 'listo' ? '' : ` · Casilla ${square}`}${open ? ` · ${esc(c.titulo)}` : ''}`;
+      const label = final ? (state.step === 'sentencia' ? 'Destino · Sentencia' : 'Última vuelta · hacia Destino') : `Turno ${state.turn + 1} de ${TURNS}${state.step === 'listo' ? '' : ` · Casilla ${square}`}${open ? ` · ${esc(c.titulo)}` : ''}`;
       turn.style.setProperty('--team', a.color);
       turn.innerHTML = `
         <div class="turn-chip">${vehicleSVG(a.vehiculo, a.color)}</div>

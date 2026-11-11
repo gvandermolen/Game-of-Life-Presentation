@@ -37,14 +37,14 @@ El sonido se prende y se apaga con el botón del parlante (arriba a la derecha) 
 | Auto en la casilla | Se abre la tarjeta: situación y pregunta |
 | Tarjeta | Se da vuelta: la respuesta |
 | Respuesta | Se cierra y pasa al turno siguiente |
-| Última vuelta | Un `Espacio` gira la ruedita y otro lleva el auto a Destino, auto por auto |
-| Después del cuarto auto | Cartel de Destino con papel picado |
+| Última vuelta, antes de girar | Gira la ruedita |
+| Ruedita girada | El auto llega a Destino y se da vuelta su sentencia |
+| Sentencia | Se cierra y pasa al auto siguiente; en la cuarta, a la ruedita (con fanfarria y papel picado) |
 
 ### Final
 
 | Momento | `Espacio` |
 | --- | --- |
-| Sentencias | Se da vuelta una sentencia por vez (4) |
 | Ruedita | Cartel "¿Se dieron cuenta…?"; con otro `Espacio`, todos los números que salieron |
 | Celular final | Clic en la letra chica: las cláusulas del juego |
 

@@ -31,10 +31,11 @@ test('the class runs from the lap to the clauses, with no transition sign', () =
   const meta = p.indexOf('meta');
   assert.equal(p[meta + 1], 'celular', 'from the lap arrival straight to the phone');
   assert.ok(p.lastIndexOf('vuelta') < meta && meta < p.indexOf('bifurcacion'));
-  assert.equal(p.filter((x) => x === 'turno').length, TURNS * 5 + CARS * 2);
-  assert.equal(p.filter((x) => x === 'sentencias').length, CARS);
+  assert.equal(p.filter((x) => x === 'turno').length, TURNS * 5 + CARS * 3);
   assert.equal(p.filter((x) => x === 'ruedita').length, 2);
-  for (const x of ['llegada', 'celular2']) assert.ok(p.includes(x), x);
+  for (const x of ['llegada', 'sentencias']) assert.ok(!p.includes(x), `no ${x} phase: each sentencia comes with its car`);
+  assert.equal(p[p.indexOf('ruedita') - 1], 'turno', 'from the last sentencia straight to the spinner');
+  assert.ok(p.includes('celular2'));
 });
 
 test('each lap square: spin opens the title, then the text by parts, then it closes', () => {
@@ -76,7 +77,7 @@ test('game spins land each car on its three card squares, then on Destino', () =
   }
 });
 
-test('the last round: each car spins once more and drives to Destino, two clicks each', () => {
+test('the last round: each car spins, drives to Destino with its sentencia, and hands over', () => {
   let s = { phase: 'turno', turn: TURNS - 1, step: 'respuesta' };
   s = next(s);
   assert.deepEqual(s, { phase: 'turno', turn: TURNS, step: 'listo' });
@@ -84,10 +85,15 @@ test('the last round: each car spins once more and drives to Destino, two clicks
   assert.deepEqual(s, { phase: 'turno', turn: TURNS, step: 'girado' });
   assert.deepEqual(carPlaces(s)[0], { at: 'casilla', square: 17 }, 'the spin alone does not move the car');
   s = next(s);
-  assert.deepEqual(s, { phase: 'turno', turn: TURNS + 1, step: 'listo' });
+  assert.deepEqual(s, { phase: 'turno', turn: TURNS, step: 'sentencia' });
   assert.deepEqual(carPlaces(s)[0], { at: 'destino' });
   assert.deepEqual(carPlaces(s)[1], { at: 'casilla', square: 16 });
-  assert.deepEqual(next({ phase: 'turno', turn: ALL_TURNS - 1, step: 'girado' }), { phase: 'llegada' });
+  s = next(s);
+  assert.deepEqual(s, { phase: 'turno', turn: TURNS + 1, step: 'listo' });
+  assert.deepEqual(carPlaces(s)[0], { at: 'destino' });
+  assert.deepEqual(next({ phase: 'turno', turn: ALL_TURNS - 1, step: 'girado' }), { phase: 'turno', turn: ALL_TURNS - 1, step: 'sentencia' });
+  assert.deepEqual(next({ phase: 'turno', turn: ALL_TURNS - 1, step: 'sentencia' }), { phase: 'ruedita', lista: false });
+  assert.equal(isValid({ phase: 'turno', turn: 3, step: 'sentencia' }), false, 'sentencias only on the way home');
   assert.equal(isValid({ phase: 'turno', turn: TURNS, step: 'pregunta' }), false, 'no card on the way home');
 });
 
@@ -147,7 +153,6 @@ test('the fork: each car on its own, negotiating chooses again', () => {
 });
 
 test('the final reveal shows the spins, then the phone', () => {
-  assert.deepEqual(next({ phase: 'sentencias', shown: 4 }), { phase: 'ruedita', lista: false });
   assert.deepEqual(next({ phase: 'ruedita', lista: false }), { phase: 'ruedita', lista: true });
   assert.deepEqual(next({ phase: 'ruedita', lista: true }), { phase: 'celular2' });
 });
@@ -164,6 +169,7 @@ test('no two cars ever share a square, and every state of the script is valid', 
   assert.equal(isValid({ phase: 'bifurcacion' }), false);
   assert.equal(isValid({ phase: 'turno', turn: 3 }), false);
   assert.equal(isValid({ phase: 'transicion' }), false);
+  assert.equal(isValid({ phase: 'sentencias', shown: 1 }), false);
   assert.equal(isValid({ phase: 'vuelta', stop: 5, step: 'texto', part: 9 }), false);
 });
 
@@ -196,13 +202,13 @@ test('store: back, forward, jump and persistence', () => {
 
 test('store ignores saved data from another version or of the wrong shape', () => {
   const storage = memoryStorage();
-  storage.setItem(STORAGE_KEY, JSON.stringify({ v: 99, state: { phase: 'llegada' }, back: [] }));
+  storage.setItem(STORAGE_KEY, JSON.stringify({ v: 99, state: { phase: 'ruedita', lista: false }, back: [] }));
   assert.deepEqual(Store.load(storage).state, START);
   storage.setItem(STORAGE_KEY, JSON.stringify({ v: STORE_VERSION, state: { phase: 'bifurcacion' }, back: [] }));
   assert.deepEqual(Store.load(storage).state, START);
-  storage.setItem(STORAGE_KEY, JSON.stringify({ v: STORE_VERSION, state: { phase: 'llegada' }, back: [{ phase: 'transicion' }] }));
+  storage.setItem(STORAGE_KEY, JSON.stringify({ v: STORE_VERSION, state: { phase: 'celular2' }, back: [{ phase: 'transicion' }] }));
   assert.deepEqual(Store.load(storage).state, START);
-  storage.setItem(STORAGE_KEY, JSON.stringify({ v: 2, state: { phase: 'llegada' }, back: [], settings: { titulo: 'Mi clase', velocidad: 1.5 } }));
+  storage.setItem(STORAGE_KEY, JSON.stringify({ v: 3, state: { phase: 'llegada' }, back: [], settings: { titulo: 'Mi clase', velocidad: 1.5 } }));
   const old = Store.load(storage);
   assert.deepEqual(old.state, START, 'a save of the old script starts over');
   assert.equal(old.settings.titulo, 'Mi clase', 'but keeps the settings');

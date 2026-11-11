@@ -114,6 +114,24 @@ test('verdicts follow the spec', () => {
   assert.match(AUTOS[2].sentencia, /confirmada por la Justicia/);
 });
 
+test('the rewritten cards: hints moved, and the answers of the spec', () => {
+  const g1 = AUTOS[0].casillas;
+  assert.match(g1[0].respuesta, /a destino sano y salvo/);
+  assert.match(g1[0].respuesta, /Art\. 1289 y Art 40 LDC/);
+  assert.equal(g1[1].pregunta, '¿Corresponde esa reducción?');
+  assert.match(g1[1].pista, /no hubo peritaje/);
+  assert.match(g1[1].respuesta, /Art\. 1729/);
+  assert.equal(g1[2].pista, undefined);
+  assert.match(g1[2].pregunta, /mera intermediaria/);
+  assert.doesNotMatch(g1[2].respuesta, /9\.000\.000/);
+  assert.doesNotMatch(AUTOS[1].casillas[0].respuesta, /externo a la actividad/);
+  assert.match(AUTOS[2].casillas[0].situacion, /por un pozo y le reclama a Uber/);
+  assert.match(AUTOS[2].casillas[0].respuesta, /el resto son abusivas/);
+  assert.match(AUTOS[2].casillas[1].pista, /controversias excluidas de arbitraje/);
+  assert.match(AUTOS[2].casillas[1].respuesta, /Arts\. 1109, 2654, 2656/);
+  assert.doesNotMatch(AUTOS[3].casillas[1].respuesta, /Élite Taxi/);
+});
+
 test('the terms switch to English, have no placeholders and no highlighted ending', () => {
   assert.ok(TERMINOS.castellano.length && TERMINOS.ingles.length);
   assert.ok(TERMINOS.segundos <= 16);

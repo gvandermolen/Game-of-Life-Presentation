@@ -1,5 +1,5 @@
 import { AUTOS, AUTO_VUELTA, GIROS_JUEGO, GIROS_VUELTA, TITULO, casilla } from './content/guion.js';
-import { FORK, LAP_POS, LAP_SQUARES, turnInfo } from './engine/flow.js';
+import { CARS, FORK, LAP_POS, LAP_SQUARES, turnInfo } from './engine/flow.js';
 import { Store } from './engine/store.js';
 import { forkAceptar, forkLeer, forkNegociar, playMove } from './scene/fx.js';
 import { INICIO_S, squareS } from './scene/layout.js';
@@ -173,8 +173,7 @@ class App {
     this.slides.show(p === 'vuelta' ? state : null);
     this.slides.arrival(p === 'meta');
     this.fork.show(p === 'bifurcacion' ? state : null);
-    this.finale.arrival(p === 'llegada');
-    this.finale.sentencias(p === 'sentencias' ? state.shown : 0);
+    this.finale.verdict(p === 'turno' && state.step === 'sentencia' ? turnInfo(state.turn).car : null);
     this.finale.ruedita(p === 'ruedita' ? state : null);
     if (p === 'turno' && ['pregunta', 'respuesta'].includes(state.step)) this.cards.show(state.turn, state.step);
     else this.cards.close();
@@ -191,8 +190,7 @@ class App {
       if (state.step === 'listo') st.view('overview', 1.4);
       else if (state.step === 'girado') st.view('spinner');
       else st.frameCard(st.pieces[turnInfo(state.turn).car].position);
-    } else if (p === 'llegada') st.view('casa', 1.4);
-    else if (p === 'ruedita') st.view('spinner');
+    } else if (p === 'ruedita') st.view('spinner');
     else st.view('overview');
   }
 
@@ -242,18 +240,6 @@ class App {
       }
       case 'turno':
         return this.playTurn(prev, next);
-      case 'llegada':
-      case 'sentencias':
-        if (next.phase === 'sentencias') {
-          this.finale.arrival(false);
-          this.finale.sentencias(next.shown, { animate: true });
-          await st.wait(1.3);
-        } else {
-          this.finale.sentencias(0);
-          st.view('spinner');
-          await st.wait(0.7);
-        }
-        return;
       case 'ruedita':
         if (next.phase === 'ruedita') {
           this.finale.ruedita(next);
@@ -304,7 +290,8 @@ class App {
 
   // One click per step: spin, move (with the square's animation), the card,
   // the answer, then close and hand over to the next car. In the last round
-  // the click after the spin drives the car to Destino.
+  // the click after the spin drives the car to Destino and turns over its
+  // sentencia.
   async playTurn(prev, next) {
     const st = this.stage;
     const t = prev.turn;
@@ -329,16 +316,30 @@ class App {
         const lane = st.passing(car, fromS, toS);
         st.follow(car, { dist: 11, height: 10.5, rate: 2.6 });
         await playMove(st, c?.anim, { car, fromS, toS, lane, sound: this.sound, ui: this.ui, casilla: c });
-        if (next.phase === 'llegada') {
-          st.setActive(null);
-          st.view('casa', 1.4);
-          this.finale.arrival(true, { fanfare: true });
-          await st.wait(0.8);
+        if (final) {
+          st.frameCard(st.pieces[car].position);
+          await st.wait(0.35);
+          this.finale.verdict(car, { animate: true });
+          await st.wait(0.65);
+          this.finale.flip(car);
+          if (car === CARS - 1) {
+            this.sound.fanfare();
+            this.effects.confetti(5);
+          }
+          await st.wait(0.9);
           return;
         }
-        await st.wait(final ? 0.5 : 0.3);
+        await st.wait(0.3);
         return;
       }
+      case 'sentencia':
+        this.finale.verdict(null);
+        if (next.phase === 'ruedita') {
+          st.setActive(null);
+          st.view('spinner');
+          await st.wait(0.7);
+        } else await st.wait(0.4);
+        return;
       case 'movido':
       case 'pregunta':
         return;

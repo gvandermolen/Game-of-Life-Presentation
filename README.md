@@ -33,8 +33,9 @@ Atajos completos: [docs/ATAJOS.md](docs/ATAJOS.md).
    - Negociar los términos: barrera y cartel "Contrato por adhesión". El auto vuelve y elige otra vez.
    - Leer los términos: el texto pasa demasiado rápido y en inglés. Después, a Inicio.
    - Aceptar sin leer: directo a Inicio.
-4. **12 turnos**: ruedita, el auto avanza (con su animación), la tarjeta con la situación y la pregunta, que se da vuelta para mostrar la respuesta, y pasa el turno. Después, una última vuelta: cada auto gira y llega a Destino.
-5. **Final**: llegada a Destino, las cuatro sentencias, la ruedita con todos los números que salieron y el celular final con las cláusulas del juego.
+4. **12 turnos**: ruedita, el auto avanza (con su animación), la tarjeta con la situación y la pregunta, que se da vuelta para mostrar la respuesta, y pasa el turno.
+5. **Última vuelta**: cada auto gira una vez más y llega a Destino. Al llegar se da vuelta su sentencia (una tarjeta grande, del color del auto). Con la cuarta suenan la fanfarria y el papel picado.
+6. **Final**: la ruedita con todos los números que salieron, y el celular final con las cláusulas del juego.
 
 ## Documentación
 

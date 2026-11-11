@@ -7,7 +7,7 @@ import { CASILLAS_JUEGO, CASILLAS_VUELTA, GIROS_JUEGO, GIROS_VUELTA, VUELTA } fr
 //
 //   vuelta  the explanatory lap: one car, 13 slides, then Destino ('meta')
 //   juego   phone, fork (one car at a time), 12 card turns, a last round that
-//           takes each car to Destino, the arrival and the finale
+//           takes each car to Destino and shows its sentencia, then the finale
 
 export const CARS = 4;
 // Rounds with a card; then one more round to Destino.
@@ -20,9 +20,9 @@ export const LAP_SQUARES = CASILLAS_VUELTA;
 export const FORK = ['negociar', 'leer', 'aceptar'];
 
 // The steps of a game turn, one click each. The drive to Destino has no card:
-// spin, and the next click drives the car home and hands over.
+// spin, then the car drives home and its sentencia turns over.
 export const TURN_STEPS = ['listo', 'girado', 'movido', 'pregunta', 'respuesta'];
-export const FINAL_STEPS = ['listo', 'girado'];
+export const FINAL_STEPS = ['listo', 'girado', 'sentencia'];
 
 export function stepsOf(turn) {
   return turn < TURNS ? TURN_STEPS : FINAL_STEPS;
@@ -64,12 +64,8 @@ export function next(s) {
       const steps = stepsOf(s.turn);
       const i = steps.indexOf(s.step);
       if (i < steps.length - 1) return { phase: 'turno', turn: s.turn, step: steps[i + 1] };
-      return s.turn + 1 < ALL_TURNS ? { phase: 'turno', turn: s.turn + 1, step: 'listo' } : { phase: 'llegada' };
+      return s.turn + 1 < ALL_TURNS ? { phase: 'turno', turn: s.turn + 1, step: 'listo' } : { phase: 'ruedita', lista: false };
     }
-    case 'llegada':
-      return { phase: 'sentencias', shown: 1 };
-    case 'sentencias':
-      return s.shown < CARS ? { phase: 'sentencias', shown: s.shown + 1 } : { phase: 'ruedita', lista: false };
     case 'ruedita':
       return s.lista ? { phase: 'celular2' } : { phase: 'ruedita', lista: true };
     case 'celular2':
@@ -92,7 +88,7 @@ export function choose(s, choice) {
 // Turns whose move has already been played in this state.
 export function playedTurns(s) {
   if (s.phase === 'turno') return ['listo', 'girado'].includes(s.step) ? s.turn : s.turn + 1;
-  return ['llegada', 'sentencias', 'ruedita', 'celular2', 'clausulas'].includes(s.phase) ? ALL_TURNS : 0;
+  return ['ruedita', 'celular2', 'clausulas'].includes(s.phase) ? ALL_TURNS : 0;
 }
 
 // Spins car c has played once `played` turns are done (4 once at Destino).
@@ -144,7 +140,6 @@ export function spinShown(s) {
     const t = s.step === 'listo' ? s.turn - 1 : s.turn;
     return t >= 0 ? GIROS_JUEGO[t] : null;
   }
-  if (['llegada', 'sentencias'].includes(s.phase)) return GIROS_JUEGO.at(-1);
   return null;
 }
 
@@ -158,7 +153,7 @@ export function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
 
-const PHASES = ['vuelta', 'meta', 'celular', 'bifurcacion', 'turno', 'llegada', 'sentencias', 'ruedita', 'celular2', 'clausulas'];
+const PHASES = ['vuelta', 'meta', 'celular', 'bifurcacion', 'turno', 'ruedita', 'celular2', 'clausulas'];
 const int = (v, lo, hi) => Number.isInteger(v) && v >= lo && v <= hi;
 
 // A saved state that this version of the script can show.
@@ -175,8 +170,6 @@ export function isValid(s) {
       return int(s.car, 0, CARS - 1) && Array.isArray(s.tried);
     case 'turno':
       return int(s.turn, 0, ALL_TURNS - 1) && stepsOf(s.turn).includes(s.step);
-    case 'sentencias':
-      return int(s.shown, 1, CARS);
     case 'ruedita':
       return typeof s.lista === 'boolean';
     default:

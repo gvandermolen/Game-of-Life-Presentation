@@ -1,7 +1,7 @@
 import { TITULO } from '../content/guion.js';
 import { START, choose, isValid, next, same } from './flow.js';
 
-export const STORE_VERSION = 3;
+export const STORE_VERSION = 4;
 export const STORAGE_KEY = 'destino-sano-y-salvo.v2';
 
 export const DEFAULT_SETTINGS = {
